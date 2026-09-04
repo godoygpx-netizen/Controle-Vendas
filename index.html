@@ -794,7 +794,8 @@ function linkCobrancaWhatsapp(venda){
   let digitos = tel.replace(/\D/g, '');
   if(digitos.length <= 11){ digitos = '55' + digitos; } // adiciona DDI Brasil se não tiver
   const nome = nomeCliente(venda.clienteId);
-  let msg = `Olá ${nome}! Passando para lembrar do pagamento pendente de ${fmtMoney(venda.total)} referente à compra do dia ${fmtDate(venda.data)}.`;
+  const listaItens = venda.itens.map(i => `- ${i.qtd}x ${i.nome}`).join('\n');
+  let msg = `Olá ${nome}! Passando para lembrar do pagamento pendente referente à compra do dia ${fmtDate(venda.data)}:\n\n${listaItens}\n\nTotal: ${fmtMoney(venda.total)}`;
   if(config.pixKey){ msg += `\n\nChave Pix para pagamento: ${config.pixKey}`; }
   msg += `\n\nObrigado! 😊`;
   return `https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`;
