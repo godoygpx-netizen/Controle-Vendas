@@ -119,6 +119,12 @@
   .cliente-sugestoes .sug-item:last-child{border-bottom:none;}
   .cliente-sugestoes .sug-item:active{background:var(--paper);}
   .cliente-sugestoes .sug-item.sug-vazio{color:var(--ink-soft); font-style:italic;}
+  .cliente-sugestoes .sug-item.sug-cadastrar{color:var(--green); font-weight:600;}
+  .novo-cliente-form{
+    border:1px dashed var(--line); border-radius:9px; padding:12px; margin-top:8px; background:var(--paper);
+  }
+  .novo-cliente-form label{margin-top:8px;}
+  .novo-cliente-form label:first-child{margin-top:0;}
   .chip{
     display:flex; justify-content:space-between; align-items:center;
     background:var(--paper); border:1px solid var(--line); border-radius:9px;
@@ -363,6 +369,16 @@
     <input type="hidden" id="vendaClienteId" value="">
     <input type="text" id="vendaClienteBusca" placeholder="🔎 Buscar cliente ou deixar em branco..." autocomplete="off" oninput="filtrarClienteVenda()" onfocus="filtrarClienteVenda()">
     <div id="vendaClienteSugestoes" class="cliente-sugestoes"></div>
+    <div id="vendaNovoClienteForm" class="novo-cliente-form" style="display:none;">
+      <label>Nome do novo cliente</label>
+      <input id="vendaNovoClienteNome" placeholder="Nome">
+      <label>Telefone</label>
+      <input id="vendaNovoClienteTelefone" placeholder="Opcional, para cobrança via WhatsApp">
+      <div class="row" style="margin-top:10px;">
+        <button class="btn btn-gold btn-sm" onclick="confirmarNovoClienteVenda()">Salvar e usar</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelarNovoClienteVenda()">Cancelar</button>
+      </div>
+    </div>
 
     <label>Adicionar item</label>
     <div class="item-row">
@@ -692,6 +708,7 @@ function openVendaModal(){
   document.getElementById('vendaClienteId').value = '';
   document.getElementById('vendaClienteBusca').value = '';
   document.getElementById('vendaClienteSugestoes').classList.remove('active');
+  document.getElementById('vendaNovoClienteForm').style.display = 'none';
   const pSel = document.getElementById('vendaProdutoSelect');
   pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}" ${p.estoque<=0?'disabled':''}>${escapeHtml(p.nome)} — ${fmtMoney(p.preco)} (${p.estoque<=0?'sem estoque':'estoque: '+p.estoque})</option>`).join('');
   document.getElementById('vendaItemQtd').value = 1;
@@ -701,7 +718,8 @@ function openVendaModal(){
   document.getElementById('vendaModalBg').classList.add('active');
 }
 function filtrarClienteVenda(){
-  const termo = document.getElementById('vendaClienteBusca').value.trim().toLowerCase();
+  const termoOriginal = document.getElementById('vendaClienteBusca').value.trim();
+  const termo = termoOriginal.toLowerCase();
   const el = document.getElementById('vendaClienteSugestoes');
   let resultados = termo ? clientes.filter(c => c.nome.toLowerCase().includes(termo)) : clientes.slice();
   resultados = resultados.sort((a,b)=>a.nome.localeCompare(b.nome)).slice(0, 8);
@@ -713,6 +731,9 @@ function filtrarClienteVenda(){
   if(!resultados.length && termo){
     html += `<div class="sug-item sug-vazio">Nenhum cliente encontrado</div>`;
   }
+  if(termo){
+    html += `<div class="sug-item sug-cadastrar" onclick="abrirNovoClienteVenda()">+ Cadastrar "${escapeHtml(termoOriginal)}" como novo cliente</div>`;
+  }
   el.innerHTML = html;
   el.classList.add('active');
 }
@@ -720,6 +741,30 @@ function selecionarClienteVenda(id, nome){
   document.getElementById('vendaClienteId').value = id;
   document.getElementById('vendaClienteBusca').value = nome;
   document.getElementById('vendaClienteSugestoes').classList.remove('active');
+}
+function abrirNovoClienteVenda(){
+  const termo = document.getElementById('vendaClienteBusca').value.trim();
+  document.getElementById('vendaClienteSugestoes').classList.remove('active');
+  document.getElementById('vendaNovoClienteNome').value = termo;
+  document.getElementById('vendaNovoClienteTelefone').value = '';
+  document.getElementById('vendaNovoClienteForm').style.display = 'block';
+}
+function cancelarNovoClienteVenda(){
+  document.getElementById('vendaNovoClienteForm').style.display = 'none';
+}
+function confirmarNovoClienteVenda(){
+  const nome = document.getElementById('vendaNovoClienteNome').value.trim();
+  if(!nome){ alert('Informe o nome do cliente.'); return; }
+  const novo = {
+    id: uid(),
+    nome,
+    telefone: document.getElementById('vendaNovoClienteTelefone').value.trim(),
+    endereco: ''
+  };
+  clientes.push(novo);
+  DB.set('cv_clientes', clientes);
+  document.getElementById('vendaNovoClienteForm').style.display = 'none';
+  selecionarClienteVenda(novo.id, novo.nome);
 }
 function closeVendaModal(){
   document.getElementById('vendaModalBg').classList.remove('active');
