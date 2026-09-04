@@ -235,14 +235,16 @@
       <input id="produtoNome" placeholder="Nome do produto">
       <div class="row">
         <div>
-          <label>Preço (R$) *</label>
+          <label>Preço de venda (R$) *</label>
           <input id="produtoPreco" type="number" step="0.01" min="0" placeholder="0,00">
         </div>
         <div>
-          <label>Estoque</label>
-          <input id="produtoEstoque" type="number" step="1" min="0" placeholder="0">
+          <label>Custo (R$)</label>
+          <input id="produtoCusto" type="number" step="0.01" min="0" placeholder="0,00">
         </div>
       </div>
+      <label>Estoque</label>
+      <input id="produtoEstoque" type="number" step="1" min="0" placeholder="0">
       <div class="row" style="margin-top:14px;">
         <button class="btn btn-primary" onclick="salvarProduto()">Salvar</button>
         <button class="btn btn-ghost" onclick="limparFormProduto()">Limpar</button>
@@ -413,8 +415,9 @@ function salvarProduto(){
   const preco = parseFloat(document.getElementById('produtoPreco').value);
   if(!nome || isNaN(preco)){ alert('Informe nome e preço do produto.'); return; }
   const estoque = parseInt(document.getElementById('produtoEstoque').value) || 0;
+  const custo = parseFloat(document.getElementById('produtoCusto').value) || 0;
   const id = document.getElementById('produtoId').value;
-  const data = { id: id || uid(), nome, preco, estoque };
+  const data = { id: id || uid(), nome, preco, custo, estoque };
   if(id){
     produtos = produtos.map(p => p.id === id ? data : p);
   } else {
@@ -430,6 +433,7 @@ function editarProduto(id){
   document.getElementById('produtoId').value = p.id;
   document.getElementById('produtoNome').value = p.nome;
   document.getElementById('produtoPreco').value = p.preco;
+  document.getElementById('produtoCusto').value = p.custo || '';
   document.getElementById('produtoEstoque').value = p.estoque;
   document.getElementById('produtoFormTitle').textContent = 'Editar produto';
   window.scrollTo({top:0, behavior:'smooth'});
@@ -444,6 +448,7 @@ function limparFormProduto(){
   document.getElementById('produtoId').value = '';
   document.getElementById('produtoNome').value = '';
   document.getElementById('produtoPreco').value = '';
+  document.getElementById('produtoCusto').value = '';
   document.getElementById('produtoEstoque').value = '';
   document.getElementById('produtoFormTitle').textContent = 'Novo produto';
 }
@@ -454,7 +459,7 @@ function renderProdutos(){
     <div class="list-item">
       <div class="info">
         <div class="name">${escapeHtml(p.nome)}</div>
-        <div class="meta">${fmtMoney(p.preco)} · estoque: ${p.estoque}${p.estoque <= 3 ? ' ⚠️' : ''}</div>
+        <div class="meta">${fmtMoney(p.preco)}${p.custo ? ` · custo ${fmtMoney(p.custo)} · margem ${fmtMoney(p.preco - p.custo)}` : ''} · estoque: ${p.estoque}${p.estoque <= 3 ? ' ⚠️' : ''}</div>
       </div>
       <div class="actions">
         <button class="icon-btn" onclick="editarProduto('${p.id}')">Editar</button>
@@ -489,7 +494,7 @@ function addItemVenda(){
   if(!produto) return;
   const existente = vendaItensTemp.find(i => i.produtoId === produtoId);
   if(existente){ existente.qtd += qtd; }
-  else { vendaItensTemp.push({ produtoId, nome: produto.nome, precoUnit: produto.preco, qtd }); }
+  else { vendaItensTemp.push({ produtoId, nome: produto.nome, precoUnit: produto.preco, custoUnit: produto.custo || 0, qtd }); }
   document.getElementById('vendaItemQtd').value = 1;
   renderVendaItens();
 }
@@ -606,10 +611,13 @@ function renderResumo(){
   const doMes = vendas.filter(v => v.data.slice(0,7) === mesAtual);
   const totalMes = doMes.reduce((s,v)=>s+v.total,0);
   const totalPendente = vendas.filter(v=>v.status==='Pendente').reduce((s,v)=>s+v.total,0);
+  const custoMes = doMes.reduce((s,v)=>s + v.itens.reduce((si,i)=>si + (i.custoUnit||0)*i.qtd, 0), 0);
+  const lucroMes = totalMes - custoMes;
 
   document.getElementById('resumoStats').innerHTML = `
     <div class="stat"><div class="num">${fmtMoney(totalMes)}</div><div class="lbl">Vendido este mês</div></div>
     <div class="stat gold"><div class="num">${doMes.length}</div><div class="lbl">Vendas este mês</div></div>
+    <div class="stat" style="grid-column:1/-1;"><div class="num">${fmtMoney(lucroMes)}</div><div class="lbl">Lucro estimado este mês (após custo de produtos)</div></div>
   `;
 
   const formas = {};
