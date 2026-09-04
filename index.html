@@ -133,6 +133,27 @@
   }
   .badge.pago{background:#DCEBDF; color:var(--green-deep);}
   .badge.pendente{background:#F6DCC9; color:var(--danger);}
+  .badge.estoque-ok{background:#DCEBDF; color:var(--green-deep);}
+  .badge.estoque-baixo{background:#F6E7C9; color:var(--gold);}
+  .badge.estoque-zero{background:#F6DCC9; color:var(--danger);}
+
+  .foto-row{display:flex; align-items:center; gap:12px; margin-top:4px;}
+  .foto-preview, .foto-placeholder{
+    width:56px; height:56px; border-radius:10px; object-fit:cover; flex-shrink:0;
+    border:1px solid var(--line); background:var(--paper);
+  }
+  .foto-placeholder{display:flex; align-items:center; justify-content:center; font-size:22px;}
+  #produtoFoto{font-size:12px;}
+  .thumb{width:44px; height:44px; border-radius:9px; object-fit:cover; border:1px solid var(--line); flex-shrink:0; background:var(--paper);}
+  .thumb-placeholder{
+    width:44px; height:44px; border-radius:9px; border:1px solid var(--line); background:var(--paper);
+    display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;
+  }
+  .list-item.with-thumb{align-items:center;}
+  .estoque-summary{display:flex; justify-content:space-between; gap:10px; font-size:13px;}
+  .estoque-summary div{text-align:center; flex:1;}
+  .estoque-summary .n{font-family:'Lora',serif; font-size:19px; font-weight:700; color:var(--green-deep);}
+  .estoque-summary .l{font-size:11px; color:var(--ink-soft); margin-top:2px;}
 
   nav.tabs{
     position:fixed; bottom:0; left:0; right:0;
@@ -245,11 +266,21 @@
       </div>
       <label>Estoque</label>
       <input id="produtoEstoque" type="number" step="1" min="0" placeholder="0">
+      <label>Foto</label>
+      <div class="foto-row">
+        <img id="produtoFotoPreview" class="foto-preview" style="display:none;">
+        <div class="foto-placeholder" id="produtoFotoPlaceholder">📦</div>
+        <div style="flex:1;">
+          <input type="file" id="produtoFoto" accept="image/*" onchange="preverFotoProduto(event)">
+          <button type="button" class="btn btn-ghost btn-sm" id="produtoFotoRemover" style="display:none; margin-top:6px;" onclick="removerFotoProduto()">Remover foto</button>
+        </div>
+      </div>
       <div class="row" style="margin-top:14px;">
         <button class="btn btn-primary" onclick="salvarProduto()">Salvar</button>
         <button class="btn btn-ghost" onclick="limparFormProduto()">Limpar</button>
       </div>
     </div>
+    <div class="card" id="estoqueResumoCard"></div>
     <div class="card">
       <h3>Cadastrados</h3>
       <div id="listaProdutos"></div>
@@ -410,6 +441,39 @@ function renderClientes(){
 }
 
 /* ---------- PRODUTOS ---------- */
+let produtoFotoTemp = null;
+
+function preverFotoProduto(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 480;
+      let w = img.width, h = img.height;
+      if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+      else if(h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      produtoFotoTemp = canvas.toDataURL('image/jpeg', 0.7);
+      document.getElementById('produtoFotoPreview').src = produtoFotoTemp;
+      document.getElementById('produtoFotoPreview').style.display = 'block';
+      document.getElementById('produtoFotoPlaceholder').style.display = 'none';
+      document.getElementById('produtoFotoRemover').style.display = 'inline-flex';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function removerFotoProduto(){
+  produtoFotoTemp = null;
+  document.getElementById('produtoFoto').value = '';
+  document.getElementById('produtoFotoPreview').style.display = 'none';
+  document.getElementById('produtoFotoPlaceholder').style.display = 'flex';
+  document.getElementById('produtoFotoRemover').style.display = 'none';
+}
 function salvarProduto(){
   const nome = document.getElementById('produtoNome').value.trim();
   const preco = parseFloat(document.getElementById('produtoPreco').value);
@@ -417,7 +481,8 @@ function salvarProduto(){
   const estoque = parseInt(document.getElementById('produtoEstoque').value) || 0;
   const custo = parseFloat(document.getElementById('produtoCusto').value) || 0;
   const id = document.getElementById('produtoId').value;
-  const data = { id: id || uid(), nome, preco, custo, estoque };
+  const foto = produtoFotoTemp;
+  const data = { id: id || uid(), nome, preco, custo, estoque, foto };
   if(id){
     produtos = produtos.map(p => p.id === id ? data : p);
   } else {
@@ -435,6 +500,17 @@ function editarProduto(id){
   document.getElementById('produtoPreco').value = p.preco;
   document.getElementById('produtoCusto').value = p.custo || '';
   document.getElementById('produtoEstoque').value = p.estoque;
+  produtoFotoTemp = p.foto || null;
+  if(p.foto){
+    document.getElementById('produtoFotoPreview').src = p.foto;
+    document.getElementById('produtoFotoPreview').style.display = 'block';
+    document.getElementById('produtoFotoPlaceholder').style.display = 'none';
+    document.getElementById('produtoFotoRemover').style.display = 'inline-flex';
+  } else {
+    document.getElementById('produtoFotoPreview').style.display = 'none';
+    document.getElementById('produtoFotoPlaceholder').style.display = 'flex';
+    document.getElementById('produtoFotoRemover').style.display = 'none';
+  }
   document.getElementById('produtoFormTitle').textContent = 'Editar produto';
   window.scrollTo({top:0, behavior:'smooth'});
 }
@@ -451,15 +527,35 @@ function limparFormProduto(){
   document.getElementById('produtoCusto').value = '';
   document.getElementById('produtoEstoque').value = '';
   document.getElementById('produtoFormTitle').textContent = 'Novo produto';
+  removerFotoProduto();
+}
+function estoqueBadge(qtd){
+  if(qtd <= 0) return `<span class="badge estoque-zero">Sem estoque</span>`;
+  if(qtd <= 3) return `<span class="badge estoque-baixo">Estoque baixo</span>`;
+  return `<span class="badge estoque-ok">Em estoque</span>`;
 }
 function renderProdutos(){
+  const resumoEl = document.getElementById('estoqueResumoCard');
+  const zerados = produtos.filter(p => p.estoque <= 0).length;
+  const baixos = produtos.filter(p => p.estoque > 0 && p.estoque <= 3).length;
+  const totalUnidades = produtos.reduce((s,p) => s + (p.estoque||0), 0);
+  resumoEl.innerHTML = `
+    <h3>Estoque</h3>
+    <div class="estoque-summary">
+      <div><div class="n">${totalUnidades}</div><div class="l">unidades no total</div></div>
+      <div><div class="n">${baixos}</div><div class="l">estoque baixo</div></div>
+      <div><div class="n">${zerados}</div><div class="l">sem estoque</div></div>
+    </div>
+  `;
   const el = document.getElementById('listaProdutos');
   if(!produtos.length){ el.innerHTML = '<div class="empty">Nenhum produto cadastrado ainda.</div>'; return; }
-  el.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `
-    <div class="list-item">
+  const ordenados = produtos.slice().sort((a,b) => (a.estoque - b.estoque) || a.nome.localeCompare(b.nome));
+  el.innerHTML = ordenados.map(p => `
+    <div class="list-item with-thumb">
+      ${p.foto ? `<img class="thumb" src="${p.foto}">` : `<div class="thumb-placeholder">📦</div>`}
       <div class="info">
         <div class="name">${escapeHtml(p.nome)}</div>
-        <div class="meta">${fmtMoney(p.preco)}${p.custo ? ` · custo ${fmtMoney(p.custo)} · margem ${fmtMoney(p.preco - p.custo)}` : ''} · estoque: ${p.estoque}${p.estoque <= 3 ? ' ⚠️' : ''}</div>
+        <div class="meta">${fmtMoney(p.preco)}${p.custo ? ` · custo ${fmtMoney(p.custo)}` : ''} · estoque: ${p.estoque} ${estoqueBadge(p.estoque)}</div>
       </div>
       <div class="actions">
         <button class="icon-btn" onclick="editarProduto('${p.id}')">Editar</button>
@@ -477,7 +573,7 @@ function openVendaModal(){
   cSel.innerHTML = '<option value="">Consumidor não identificado</option>' +
     clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
   const pSel = document.getElementById('vendaProdutoSelect');
-  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}">${escapeHtml(p.nome)} — ${fmtMoney(p.preco)}</option>`).join('');
+  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}" ${p.estoque<=0?'disabled':''}>${escapeHtml(p.nome)} — ${fmtMoney(p.preco)} (${p.estoque<=0?'sem estoque':'estoque: '+p.estoque})</option>`).join('');
   document.getElementById('vendaItemQtd').value = 1;
   document.getElementById('vendaForma').value = 'Pix';
   document.getElementById('vendaData').value = todayISO();
@@ -493,6 +589,12 @@ function addItemVenda(){
   const produto = produtos.find(p => p.id === produtoId);
   if(!produto) return;
   const existente = vendaItensTemp.find(i => i.produtoId === produtoId);
+  const jaNoCarrinho = existente ? existente.qtd : 0;
+  if(jaNoCarrinho + qtd > produto.estoque){
+    const disponivel = Math.max(0, produto.estoque - jaNoCarrinho);
+    alert(`Estoque insuficiente para "${produto.nome}". Disponível: ${disponivel} un.`);
+    return;
+  }
   if(existente){ existente.qtd += qtd; }
   else { vendaItensTemp.push({ produtoId, nome: produto.nome, precoUnit: produto.preco, custoUnit: produto.custo || 0, qtd }); }
   document.getElementById('vendaItemQtd').value = 1;
@@ -515,6 +617,14 @@ function renderVendaItens(){
 }
 function salvarVenda(){
   if(!vendaItensTemp.length){ alert('Adicione ao menos um item à venda.'); return; }
+  const semEstoque = vendaItensTemp.filter(i => {
+    const p = produtos.find(p => p.id === i.produtoId);
+    return !p || i.qtd > p.estoque;
+  });
+  if(semEstoque.length){
+    alert('Não há estoque suficiente para: ' + semEstoque.map(i=>i.nome).join(', ') + '. Ajuste as quantidades antes de continuar.');
+    return;
+  }
   const clienteId = document.getElementById('vendaCliente').value;
   const forma = document.getElementById('vendaForma').value;
   const data = document.getElementById('vendaData').value || todayISO();
