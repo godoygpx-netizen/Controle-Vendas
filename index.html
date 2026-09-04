@@ -6,8 +6,8 @@
 <title>Controle de Vendas</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2E5339">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192-v2.png">
+<link rel="apple-touch-icon" href="icons/icon-192-v2.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -460,13 +460,28 @@ function renderClientes(){
 
 /* ---------- PRODUTOS ---------- */
 let produtoFotoTemp = null;
+let fotoProcessando = false;
 
 function preverFotoProduto(ev){
   const file = ev.target.files[0];
   if(!file) return;
+  fotoProcessando = true;
+  document.getElementById('produtoFotoPlaceholder').textContent = '⏳';
+  document.getElementById('produtoFotoPlaceholder').style.display = 'flex';
+  document.getElementById('produtoFotoPreview').style.display = 'none';
   const reader = new FileReader();
+  reader.onerror = () => {
+    fotoProcessando = false;
+    document.getElementById('produtoFotoPlaceholder').textContent = '📦';
+    alert('Não foi possível ler essa foto. Tente outra imagem.');
+  };
   reader.onload = (e) => {
     const img = new Image();
+    img.onerror = () => {
+      fotoProcessando = false;
+      document.getElementById('produtoFotoPlaceholder').textContent = '📦';
+      alert('Não foi possível processar essa foto. Tente outra imagem.');
+    };
     img.onload = () => {
       const maxDim = 480;
       let w = img.width, h = img.height;
@@ -479,7 +494,9 @@ function preverFotoProduto(ev){
       document.getElementById('produtoFotoPreview').src = produtoFotoTemp;
       document.getElementById('produtoFotoPreview').style.display = 'block';
       document.getElementById('produtoFotoPlaceholder').style.display = 'none';
+      document.getElementById('produtoFotoPlaceholder').textContent = '📦';
       document.getElementById('produtoFotoRemover').style.display = 'inline-flex';
+      fotoProcessando = false;
     };
     img.src = e.target.result;
   };
@@ -487,12 +504,15 @@ function preverFotoProduto(ev){
 }
 function removerFotoProduto(){
   produtoFotoTemp = null;
+  fotoProcessando = false;
   document.getElementById('produtoFoto').value = '';
   document.getElementById('produtoFotoPreview').style.display = 'none';
+  document.getElementById('produtoFotoPlaceholder').textContent = '📦';
   document.getElementById('produtoFotoPlaceholder').style.display = 'flex';
   document.getElementById('produtoFotoRemover').style.display = 'none';
 }
 function salvarProduto(){
+  if(fotoProcessando){ alert('Aguarde a foto terminar de carregar e toque em Salvar novamente.'); return; }
   const nome = document.getElementById('produtoNome').value.trim();
   const preco = parseFloat(document.getElementById('produtoPreco').value);
   if(!nome || isNaN(preco)){ alert('Informe nome e preço do produto.'); return; }
@@ -501,12 +521,17 @@ function salvarProduto(){
   const id = document.getElementById('produtoId').value;
   const foto = produtoFotoTemp;
   const data = { id: id || uid(), nome, preco, custo, estoque, foto };
-  if(id){
-    produtos = produtos.map(p => p.id === id ? data : p);
-  } else {
-    produtos.push(data);
+  const listaAnterior = produtos;
+  const novaLista = id ? produtos.map(p => p.id === id ? data : p) : [...produtos, data];
+  try{
+    DB.set('cv_produtos', novaLista);
+  }catch(err){
+    alert('Não foi possível salvar a foto (arquivo muito grande para o armazenamento do celular). O produto será salvo sem a foto.');
+    data.foto = null;
+    try{ DB.set('cv_produtos', id ? listaAnterior.map(p => p.id === id ? data : p) : [...listaAnterior, data]); }
+    catch(err2){ alert('Não foi possível salvar o produto. Tente novamente.'); return; }
   }
-  DB.set('cv_produtos', produtos);
+  produtos = id ? produtos.map(p => p.id === id ? data : p) : [...produtos, data];
   limparFormProduto();
   renderProdutos();
 }
