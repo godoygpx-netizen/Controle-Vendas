@@ -262,6 +262,7 @@
     </div>
     <div class="card">
       <h3>Cadastrados</h3>
+      <input id="buscaCliente" placeholder="🔎 Buscar por nome..." oninput="renderClientes()" style="margin-bottom:12px;">
       <div id="listaClientes"></div>
     </div>
   </section>
@@ -362,10 +363,8 @@
     <label>Forma de pagamento</label>
     <select id="vendaForma" class="forma-select">
       <option>Pix</option>
-      <option>Dinheiro</option>
-      <option>Cartão débito</option>
-      <option>Cartão crédito</option>
       <option>Fiado</option>
+      <option>Cortesia</option>
     </select>
 
     <label>Data</label>
@@ -476,7 +475,10 @@ function limparFormCliente(){
 function renderClientes(){
   const el = document.getElementById('listaClientes');
   if(!clientes.length){ el.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>'; return; }
-  el.innerHTML = clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `
+  const termo = (document.getElementById('buscaCliente').value || '').trim().toLowerCase();
+  const filtrados = termo ? clientes.filter(c => c.nome.toLowerCase().includes(termo)) : clientes;
+  if(!filtrados.length){ el.innerHTML = '<div class="empty">Nenhum cliente encontrado.</div>'; return; }
+  el.innerHTML = filtrados.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `
     <div class="list-item">
       <div class="info">
         <div class="name">${escapeHtml(c.nome)}</div>
@@ -661,7 +663,7 @@ function renderProdutos(){
         ${p.foto ? `<img class="prod-thumb" src="${p.foto}">` : `<div class="prod-thumb-placeholder">📦</div>`}
         <div class="prod-card-info">
           <div class="name">${escapeHtml(p.nome)}</div>
-          <div class="price-line">${fmtMoney(p.preco)}${p.custo ? ` · custo ${fmtMoney(p.custo)}` : ''}</div>
+          <div class="price-line">${fmtMoney(p.preco)}</div>
           <div class="estoque-line"><span class="qtd">${p.estoque} un.</span> em estoque ${estoqueBadge(p.estoque)}</div>
         </div>
       </div>
@@ -818,7 +820,7 @@ function renderVendas(){
   popularFiltroMes();
   const mesSel = document.getElementById('filtroMes').value;
   const doMes = vendas.filter(v => v.data.slice(0,7) === mesSel);
-  const totalMes = doMes.reduce((s,v)=>s+v.total,0);
+  const totalMes = doMes.filter(v=>v.forma!=='Cortesia').reduce((s,v)=>s+v.total,0);
   document.getElementById('vendasResumoMes').innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center;">
       <div>
@@ -837,7 +839,7 @@ function renderVendas(){
   el.innerHTML = ordenadas.map(v => `
     <div class="list-item">
       <div class="info">
-        <div class="name">${escapeHtml(nomeCliente(v.clienteId))} <span class="badge ${v.status==='Pago'?'pago':'pendente'}">${v.status}</span></div>
+        <div class="name">${escapeHtml(nomeCliente(v.clienteId))} <span class="badge ${v.status==='Pago'?'pago':'pendente'}">${v.status}</span>${v.forma==='Cortesia' ? ' <span class="badge estoque-baixo">Cortesia</span>' : ''}</div>
         <div class="meta">${fmtDate(v.data)} · ${v.forma} · ${v.itens.length} item(ns) · ${fmtMoney(v.total)}</div>
       </div>
       <div class="actions">
@@ -853,16 +855,18 @@ function renderVendas(){
 function renderResumo(){
   document.getElementById('configPixKey').value = config.pixKey || '';
   const mesAtual = todayISO().slice(0,7);
-  const doMes = vendas.filter(v => v.data.slice(0,7) === mesAtual);
+  const doMesTudo = vendas.filter(v => v.data.slice(0,7) === mesAtual);
+  const doMes = doMesTudo.filter(v => v.forma !== 'Cortesia');
   const totalMes = doMes.reduce((s,v)=>s+v.total,0);
   const totalPendente = vendas.filter(v=>v.status==='Pendente').reduce((s,v)=>s+v.total,0);
   const custoMes = doMes.reduce((s,v)=>s + v.itens.reduce((si,i)=>si + (i.custoUnit||0)*i.qtd, 0), 0);
   const lucroMes = totalMes - custoMes;
+  const degustacoes = doMesTudo.filter(v => v.forma === 'Cortesia').length;
 
   document.getElementById('resumoStats').innerHTML = `
     <div class="stat"><div class="num">${fmtMoney(totalMes)}</div><div class="lbl">Vendido este mês</div></div>
-    <div class="stat gold"><div class="num">${doMes.length}</div><div class="lbl">Vendas este mês</div></div>
-    <div class="stat" style="grid-column:1/-1;"><div class="num">${fmtMoney(lucroMes)}</div><div class="lbl">Lucro estimado este mês (após custo de produtos)</div></div>
+    <div class="stat gold"><div class="num">${doMesTudo.length}</div><div class="lbl">Vendas este mês${degustacoes ? ` (${degustacoes} cortesia)` : ''}</div></div>
+    <div class="stat" style="grid-column:1/-1;"><div class="num">${fmtMoney(lucroMes)}</div><div class="lbl">Lucro estimado este mês (não inclui cortesias)</div></div>
   `;
 
   const formas = {};
