@@ -108,6 +108,17 @@
   .item-row select{flex:2;}
   .item-row input{flex:1;}
   .chip-list{margin-top:10px;}
+  .cliente-sugestoes{
+    border:1px solid var(--line); border-radius:9px; margin-top:4px; overflow:hidden;
+    max-height:180px; overflow-y:auto; display:none; background:#fff;
+  }
+  .cliente-sugestoes.active{display:block;}
+  .cliente-sugestoes .sug-item{
+    padding:10px 12px; font-size:14px; border-bottom:1px solid var(--line); cursor:pointer;
+  }
+  .cliente-sugestoes .sug-item:last-child{border-bottom:none;}
+  .cliente-sugestoes .sug-item:active{background:var(--paper);}
+  .cliente-sugestoes .sug-item.sug-vazio{color:var(--ink-soft); font-style:italic;}
   .chip{
     display:flex; justify-content:space-between; align-items:center;
     background:var(--paper); border:1px solid var(--line); border-radius:9px;
@@ -262,7 +273,6 @@
     </div>
     <div class="card">
       <h3>Cadastrados</h3>
-      <input id="buscaCliente" placeholder="🔎 Buscar por nome..." oninput="renderClientes()" style="margin-bottom:12px;">
       <div id="listaClientes"></div>
     </div>
   </section>
@@ -350,7 +360,9 @@
       <button class="close-x" onclick="closeVendaModal()">✕</button>
     </div>
     <label>Cliente</label>
-    <select id="vendaCliente"></select>
+    <input type="hidden" id="vendaClienteId" value="">
+    <input type="text" id="vendaClienteBusca" placeholder="🔎 Buscar cliente ou deixar em branco..." autocomplete="off" oninput="filtrarClienteVenda()" onfocus="filtrarClienteVenda()">
+    <div id="vendaClienteSugestoes" class="cliente-sugestoes"></div>
 
     <label>Adicionar item</label>
     <div class="item-row">
@@ -475,10 +487,7 @@ function limparFormCliente(){
 function renderClientes(){
   const el = document.getElementById('listaClientes');
   if(!clientes.length){ el.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>'; return; }
-  const termo = (document.getElementById('buscaCliente').value || '').trim().toLowerCase();
-  const filtrados = termo ? clientes.filter(c => c.nome.toLowerCase().includes(termo)) : clientes;
-  if(!filtrados.length){ el.innerHTML = '<div class="empty">Nenhum cliente encontrado.</div>'; return; }
-  el.innerHTML = filtrados.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `
+  el.innerHTML = clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `
     <div class="list-item">
       <div class="info">
         <div class="name">${escapeHtml(c.nome)}</div>
@@ -680,9 +689,9 @@ function renderProdutos(){
 function openVendaModal(){
   if(!produtos.length){ alert('Cadastre ao menos um produto antes de registrar uma venda.'); switchView('produtos'); return; }
   vendaItensTemp = [];
-  const cSel = document.getElementById('vendaCliente');
-  cSel.innerHTML = '<option value="">Consumidor não identificado</option>' +
-    clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+  document.getElementById('vendaClienteId').value = '';
+  document.getElementById('vendaClienteBusca').value = '';
+  document.getElementById('vendaClienteSugestoes').classList.remove('active');
   const pSel = document.getElementById('vendaProdutoSelect');
   pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}" ${p.estoque<=0?'disabled':''}>${escapeHtml(p.nome)} — ${fmtMoney(p.preco)} (${p.estoque<=0?'sem estoque':'estoque: '+p.estoque})</option>`).join('');
   document.getElementById('vendaItemQtd').value = 1;
@@ -690,6 +699,27 @@ function openVendaModal(){
   document.getElementById('vendaData').value = todayISO();
   renderVendaItens();
   document.getElementById('vendaModalBg').classList.add('active');
+}
+function filtrarClienteVenda(){
+  const termo = document.getElementById('vendaClienteBusca').value.trim().toLowerCase();
+  const el = document.getElementById('vendaClienteSugestoes');
+  let resultados = termo ? clientes.filter(c => c.nome.toLowerCase().includes(termo)) : clientes.slice();
+  resultados = resultados.sort((a,b)=>a.nome.localeCompare(b.nome)).slice(0, 8);
+  let html = '';
+  if(!termo){
+    html += `<div class="sug-item sug-vazio" onclick="selecionarClienteVenda('', 'Consumidor não identificado')">Consumidor não identificado</div>`;
+  }
+  html += resultados.map(c => `<div class="sug-item" onclick="selecionarClienteVenda('${c.id}', '${escapeHtml(c.nome).replace(/'/g,"\\'")}')">${escapeHtml(c.nome)}</div>`).join('');
+  if(!resultados.length && termo){
+    html += `<div class="sug-item sug-vazio">Nenhum cliente encontrado</div>`;
+  }
+  el.innerHTML = html;
+  el.classList.add('active');
+}
+function selecionarClienteVenda(id, nome){
+  document.getElementById('vendaClienteId').value = id;
+  document.getElementById('vendaClienteBusca').value = nome;
+  document.getElementById('vendaClienteSugestoes').classList.remove('active');
 }
 function closeVendaModal(){
   document.getElementById('vendaModalBg').classList.remove('active');
@@ -736,7 +766,7 @@ function salvarVenda(){
     alert('Não há estoque suficiente para: ' + semEstoque.map(i=>i.nome).join(', ') + '. Ajuste as quantidades antes de continuar.');
     return;
   }
-  const clienteId = document.getElementById('vendaCliente').value;
+  const clienteId = document.getElementById('vendaClienteId').value;
   const forma = document.getElementById('vendaForma').value;
   const data = document.getElementById('vendaData').value || todayISO();
   const total = vendaItensTemp.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
