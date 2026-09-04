@@ -325,6 +325,11 @@
       <h3>A receber (fiado pendente)</h3>
       <div id="resumoPendentes"></div>
     </div>
+    <div class="card">
+      <h3>Configurações</h3>
+      <label>Chave Pix (usada na mensagem de cobrança)</label>
+      <input id="configPixKey" placeholder="CPF, e-mail, telefone ou chave aleatória" oninput="salvarConfig()">
+    </div>
   </section>
 
 </main>
@@ -408,6 +413,11 @@ let clientes = DB.get('cv_clientes');
 let produtos = DB.get('cv_produtos');
 let vendas = DB.get('cv_vendas');
 let vendaItensTemp = [];
+let config = (() => { try{ return JSON.parse(localStorage.getItem('cv_config')) || {}; }catch(e){ return {}; } })();
+function salvarConfig(){
+  config.pixKey = document.getElementById('configPixKey').value.trim();
+  localStorage.setItem('cv_config', JSON.stringify(config));
+}
 
 /* ---------- nav ---------- */
 function switchView(name){
@@ -784,7 +794,9 @@ function linkCobrancaWhatsapp(venda){
   let digitos = tel.replace(/\D/g, '');
   if(digitos.length <= 11){ digitos = '55' + digitos; } // adiciona DDI Brasil se não tiver
   const nome = nomeCliente(venda.clienteId);
-  const msg = `Olá ${nome}! Passando para lembrar do pagamento pendente de ${fmtMoney(venda.total)} referente à compra do dia ${fmtDate(venda.data)}. Obrigado! 😊`;
+  let msg = `Olá ${nome}! Passando para lembrar do pagamento pendente de ${fmtMoney(venda.total)} referente à compra do dia ${fmtDate(venda.data)}.`;
+  if(config.pixKey){ msg += `\n\nChave Pix para pagamento: ${config.pixKey}`; }
+  msg += `\n\nObrigado! 😊`;
   return `https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`;
 }
 function popularFiltroMes(){
@@ -838,6 +850,7 @@ function renderVendas(){
 
 /* ---------- RESUMO ---------- */
 function renderResumo(){
+  document.getElementById('configPixKey').value = config.pixKey || '';
   const mesAtual = todayISO().slice(0,7);
   const doMes = vendas.filter(v => v.data.slice(0,7) === mesAtual);
   const totalMes = doMes.reduce((s,v)=>s+v.total,0);
