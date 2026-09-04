@@ -91,12 +91,14 @@
   .list-item .info{min-width:0;}
   .list-item .name{font-weight:600; font-size:14.5px;}
   .list-item .meta{font-size:12.5px; color:var(--ink-soft); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-  .list-item .actions{display:flex; gap:6px; flex-shrink:0;}
+  .list-item .actions{display:flex; gap:6px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end;}
   .icon-btn{
     border:none; background:var(--paper); border:1px solid var(--line); border-radius:8px;
     padding:6px 9px; font-size:13px; cursor:pointer; color:var(--ink-soft);
+    text-decoration:none; display:inline-flex; align-items:center;
   }
   .icon-btn.del{color:var(--danger);}
+  .icon-btn.whats{color:#1e7d4c; border-color:#bfe3cf; background:#EAF7EF; font-weight:600;}
 
   .empty{text-align:center; padding:30px 10px; color:var(--ink-soft); font-size:13.5px;}
 
@@ -251,7 +253,7 @@
       <input id="clienteNome" placeholder="Nome do cliente">
       <label>Telefone</label>
       <input id="clienteTelefone" placeholder="(00) 00000-0000">
-      <label>Endereço</label>
+      <label>Área / Hangar</label>
       <input id="clienteEndereco" placeholder="Opcional">
       <div class="row" style="margin-top:14px;">
         <button class="btn btn-primary" onclick="salvarCliente()">Salvar</button>
@@ -771,6 +773,20 @@ function nomeCliente(clienteId){
   const c = clientes.find(c => c.id === clienteId);
   return c ? c.nome : 'Cliente removido';
 }
+function telefoneCliente(clienteId){
+  if(!clienteId) return null;
+  const c = clientes.find(c => c.id === clienteId);
+  return c ? (c.telefone || null) : null;
+}
+function linkCobrancaWhatsapp(venda){
+  const tel = telefoneCliente(venda.clienteId);
+  if(!tel) return null;
+  let digitos = tel.replace(/\D/g, '');
+  if(digitos.length <= 11){ digitos = '55' + digitos; } // adiciona DDI Brasil se não tiver
+  const nome = nomeCliente(venda.clienteId);
+  const msg = `Olá ${nome}! Passando para lembrar do pagamento pendente de ${fmtMoney(venda.total)} referente à compra do dia ${fmtDate(venda.data)}. Obrigado! 😊`;
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`;
+}
 function popularFiltroMes(){
   const sel = document.getElementById('filtroMes');
   const meses = new Set(vendas.map(v => v.data.slice(0,7)));
@@ -812,6 +828,7 @@ function renderVendas(){
         <div class="meta">${fmtDate(v.data)} · ${v.forma} · ${v.itens.length} item(ns) · ${fmtMoney(v.total)}</div>
       </div>
       <div class="actions">
+        ${v.status==='Pendente' ? (linkCobrancaWhatsapp(v) ? `<a class="icon-btn whats" href="${linkCobrancaWhatsapp(v)}" target="_blank" rel="noopener">Cobrar</a>` : '') : ''}
         ${v.status==='Pendente' ? `<button class="icon-btn" onclick="marcarComoPago('${v.id}')">Pago</button>` : ''}
         <button class="icon-btn del" onclick="excluirVenda('${v.id}')">Excluir</button>
       </div>
@@ -853,8 +870,8 @@ function renderResumo(){
   document.getElementById('resumoPendentes').innerHTML = pendentes.length ? `
     ${pendentes.map(v => `
       <div class="list-item">
-        <div class="info"><div class="name">${escapeHtml(nomeCliente(v.clienteId))}</div><div class="meta">${fmtDate(v.data)}</div></div>
-        <div>${fmtMoney(v.total)}</div>
+        <div class="info"><div class="name">${escapeHtml(nomeCliente(v.clienteId))}</div><div class="meta">${fmtDate(v.data)} · ${fmtMoney(v.total)}</div></div>
+        ${linkCobrancaWhatsapp(v) ? `<a class="icon-btn whats" href="${linkCobrancaWhatsapp(v)}" target="_blank" rel="noopener">Cobrar</a>` : ''}
       </div>
     `).join('')}
     <div class="total-line"><span>Total a receber</span><span>${fmtMoney(totalPendente)}</span></div>
