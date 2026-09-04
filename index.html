@@ -353,6 +353,24 @@
   </div>
 </div>
 
+<!-- MODAL ENTRADA DE ESTOQUE -->
+<div class="modal-bg" id="entradaModalBg">
+  <div class="modal">
+    <div class="section-head">
+      <h2>Entrada de estoque</h2>
+      <button class="close-x" onclick="fecharEntradaEstoque()">✕</button>
+    </div>
+    <div id="entradaProdutoInfo" class="meta" style="margin-bottom:10px;"></div>
+    <label>Quantidade recebida</label>
+    <input id="entradaQtd" type="number" min="1" step="1" value="1" oninput="atualizarPreviaEntrada()">
+    <div class="total-line" style="border-top:none; padding-top:0;">
+      <span style="font-size:13px; font-weight:500; color:var(--ink-soft);">Estoque após entrada</span>
+      <span id="entradaEstoqueFinal"></span>
+    </div>
+    <button class="btn btn-primary" style="margin-top:14px;" onclick="confirmarEntradaEstoque()">Somar ao estoque</button>
+  </div>
+</div>
+
 <script>
 /* ---------- storage helpers ---------- */
 const DB = {
@@ -534,6 +552,36 @@ function estoqueBadge(qtd){
   if(qtd <= 3) return `<span class="badge estoque-baixo">Estoque baixo</span>`;
   return `<span class="badge estoque-ok">Em estoque</span>`;
 }
+let entradaProdutoId = null;
+function abrirEntradaEstoque(id){
+  const p = produtos.find(x => x.id === id);
+  if(!p) return;
+  entradaProdutoId = id;
+  document.getElementById('entradaProdutoInfo').innerHTML = `<strong style="color:var(--ink);">${escapeHtml(p.nome)}</strong><br>Estoque atual: ${p.estoque}`;
+  document.getElementById('entradaQtd').value = 1;
+  atualizarPreviaEntrada();
+  document.getElementById('entradaModalBg').classList.add('active');
+}
+function fecharEntradaEstoque(){
+  document.getElementById('entradaModalBg').classList.remove('active');
+  entradaProdutoId = null;
+}
+function atualizarPreviaEntrada(){
+  const p = produtos.find(x => x.id === entradaProdutoId);
+  if(!p) return;
+  const qtd = parseInt(document.getElementById('entradaQtd').value) || 0;
+  document.getElementById('entradaEstoqueFinal').textContent = (p.estoque + qtd) + ' un.';
+}
+function confirmarEntradaEstoque(){
+  const p = produtos.find(x => x.id === entradaProdutoId);
+  if(!p) return;
+  const qtd = parseInt(document.getElementById('entradaQtd').value);
+  if(!qtd || qtd <= 0){ alert('Informe uma quantidade válida.'); return; }
+  p.estoque = (p.estoque || 0) + qtd;
+  DB.set('cv_produtos', produtos);
+  fecharEntradaEstoque();
+  renderProdutos();
+}
 function renderProdutos(){
   const resumoEl = document.getElementById('estoqueResumoCard');
   const zerados = produtos.filter(p => p.estoque <= 0).length;
@@ -558,6 +606,7 @@ function renderProdutos(){
         <div class="meta">${fmtMoney(p.preco)}${p.custo ? ` · custo ${fmtMoney(p.custo)}` : ''} · estoque: ${p.estoque} ${estoqueBadge(p.estoque)}</div>
       </div>
       <div class="actions">
+        <button class="icon-btn" onclick="abrirEntradaEstoque('${p.id}')">+ Estoque</button>
         <button class="icon-btn" onclick="editarProduto('${p.id}')">Editar</button>
         <button class="icon-btn del" onclick="excluirProduto('${p.id}')">Excluir</button>
       </div>
