@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controle de Vendas</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2E5339">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F3EC;
+    --paper-raised:#FFFDF8;
+    --ink:#21261F;
+    --ink-soft:#5B6058;
+    --line:#DDD6C6;
+    --green:#2E5339;
+    --green-deep:#1E3A28;
+    --gold:#B8790E;
+    --gold-soft:#F0DDB3;
+    --danger:#A6402B;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    font-size:15px;
+    line-height:1.45;
+    padding-bottom:78px;
+    min-height:100vh;
+  }
+  h1,h2,h3{font-family:'Lora',serif; margin:0; font-weight:600; color:var(--green-deep);}
+  header.top{
+    padding:22px 18px 14px;
+    background:var(--paper);
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:5;
+  }
+  header.top .brand{display:flex; align-items:baseline; justify-content:space-between;}
+  header.top h1{font-size:21px; letter-spacing:.2px;}
+  header.top .tagline{font-size:12.5px; color:var(--ink-soft); margin-top:2px;}
+  main{padding:16px;}
+  .view{display:none;}
+  .view.active{display:block; animation:fade .18s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:none}}
+
+  .card{
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:12px;
+  }
+  .card h3{font-size:15px; margin-bottom:10px;}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    border:none; border-radius:10px; padding:11px 16px;
+    font-family:'Inter'; font-size:14.5px; font-weight:600;
+    cursor:pointer; width:100%;
+  }
+  .btn-primary{background:var(--green); color:#fff;}
+  .btn-primary:active{background:var(--green-deep);}
+  .btn-gold{background:var(--gold); color:#fff;}
+  .btn-ghost{background:transparent; color:var(--green); border:1px solid var(--green);}
+  .btn-danger{background:transparent; color:var(--danger); border:1px solid var(--danger);}
+  .btn-sm{padding:7px 12px; font-size:13px; width:auto;}
+  .row{display:flex; gap:8px;}
+  .row > *{flex:1;}
+
+  label{display:block; font-size:12.5px; color:var(--ink-soft); margin:10px 0 4px; font-weight:500;}
+  label:first-child{margin-top:0;}
+  input, select{
+    width:100%; padding:10px 11px; border:1px solid var(--line); border-radius:9px;
+    font-family:'Inter'; font-size:15px; background:#fff; color:var(--ink);
+  }
+  input:focus, select:focus{outline:2px solid var(--green); outline-offset:1px;}
+
+  .list-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 0; border-bottom:1px solid var(--line);
+    gap:10px;
+  }
+  .list-item:last-child{border-bottom:none;}
+  .list-item .info{min-width:0;}
+  .list-item .name{font-weight:600; font-size:14.5px;}
+  .list-item .meta{font-size:12.5px; color:var(--ink-soft); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .list-item .actions{display:flex; gap:6px; flex-shrink:0;}
+  .icon-btn{
+    border:none; background:var(--paper); border:1px solid var(--line); border-radius:8px;
+    padding:6px 9px; font-size:13px; cursor:pointer; color:var(--ink-soft);
+  }
+  .icon-btn.del{color:var(--danger);}
+
+  .empty{text-align:center; padding:30px 10px; color:var(--ink-soft); font-size:13.5px;}
+
+  .item-row{
+    display:flex; gap:8px; align-items:flex-end; margin-top:10px;
+  }
+  .item-row select{flex:2;}
+  .item-row input{flex:1;}
+  .chip-list{margin-top:10px;}
+  .chip{
+    display:flex; justify-content:space-between; align-items:center;
+    background:var(--paper); border:1px solid var(--line); border-radius:9px;
+    padding:8px 10px; margin-bottom:6px; font-size:13.5px;
+  }
+  .chip button{background:none; border:none; color:var(--danger); font-size:16px; cursor:pointer; line-height:1;}
+
+  .total-line{
+    display:flex; justify-content:space-between; align-items:center;
+    padding-top:12px; margin-top:6px; border-top:1px dashed var(--line);
+    font-family:'Lora',serif; font-weight:600; font-size:17px; color:var(--green-deep);
+  }
+
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .stat{
+    background:var(--green-deep); color:#fff; border-radius:var(--radius);
+    padding:14px; 
+  }
+  .stat .num{font-family:'Lora',serif; font-size:22px; font-weight:700;}
+  .stat .lbl{font-size:11.5px; opacity:.8; margin-top:2px;}
+  .stat.gold{background:var(--gold);}
+
+  .badge{
+    font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600;
+  }
+  .badge.pago{background:#DCEBDF; color:var(--green-deep);}
+  .badge.pendente{background:#F6DCC9; color:var(--danger);}
+
+  nav.tabs{
+    position:fixed; bottom:0; left:0; right:0;
+    background:var(--paper-raised); border-top:1px solid var(--line);
+    display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    z-index:10;
+  }
+  nav.tabs button{
+    flex:1; background:none; border:none; padding:8px 2px;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    color:var(--ink-soft); font-family:'Inter'; font-size:11px; font-weight:600;
+    cursor:pointer; border-radius:10px;
+  }
+  nav.tabs button .ic{font-size:19px;}
+  nav.tabs button.active{color:var(--green);}
+  nav.tabs button.active .ic{transform:translateY(-1px);}
+
+  .section-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .section-head h2{font-size:18px;}
+
+  .modal-bg{
+    display:none; position:fixed; inset:0; background:rgba(33,38,31,.45);
+    z-index:20; align-items:flex-end; justify-content:center;
+  }
+  .modal-bg.active{display:flex;}
+  .modal{
+    background:var(--paper); width:100%; max-width:480px;
+    border-radius:18px 18px 0 0; padding:20px 18px calc(20px + env(safe-area-inset-bottom));
+    max-height:88vh; overflow-y:auto;
+  }
+  .modal .section-head{margin-bottom:14px;}
+  .close-x{background:none; border:none; font-size:20px; color:var(--ink-soft); cursor:pointer;}
+
+  select.forma-select option{color:var(--ink);}
+  .filter-row{display:flex; gap:8px; margin-bottom:12px;}
+  .filter-row select{font-size:13px; padding:8px;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <h1>Controle de Vendas</h1>
+  </div>
+  <div class="tagline" id="tagline">Clientes, produtos e vendas em um só lugar</div>
+</header>
+
+<main>
+
+  <!-- VENDAS -->
+  <section class="view active" id="view-vendas">
+    <div class="section-head">
+      <h2>Vendas</h2>
+      <button class="btn btn-primary btn-sm" onclick="openVendaModal()">+ Nova venda</button>
+    </div>
+    <div class="filter-row">
+      <select id="filtroMes"></select>
+    </div>
+    <div class="card" id="vendasResumoMes"></div>
+    <div class="card">
+      <h3>Histórico</h3>
+      <div id="listaVendas"></div>
+    </div>
+  </section>
+
+  <!-- CLIENTES -->
+  <section class="view" id="view-clientes">
+    <div class="section-head">
+      <h2>Clientes</h2>
+    </div>
+    <div class="card">
+      <h3 id="clienteFormTitle">Novo cliente</h3>
+      <input type="hidden" id="clienteId">
+      <label>Nome *</label>
+      <input id="clienteNome" placeholder="Nome do cliente">
+      <label>Telefone</label>
+      <input id="clienteTelefone" placeholder="(00) 00000-0000">
+      <label>Endereço</label>
+      <input id="clienteEndereco" placeholder="Opcional">
+      <div class="row" style="margin-top:14px;">
+        <button class="btn btn-primary" onclick="salvarCliente()">Salvar</button>
+        <button class="btn btn-ghost" onclick="limparFormCliente()">Limpar</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Cadastrados</h3>
+      <div id="listaClientes"></div>
+    </div>
+  </section>
+
+  <!-- PRODUTOS -->
+  <section class="view" id="view-produtos">
+    <div class="section-head">
+      <h2>Produtos</h2>
+    </div>
+    <div class="card">
+      <h3 id="produtoFormTitle">Novo produto</h3>
+      <input type="hidden" id="produtoId">
+      <label>Nome *</label>
+      <input id="produtoNome" placeholder="Nome do produto">
+      <div class="row">
+        <div>
+          <label>Preço (R$) *</label>
+          <input id="produtoPreco" type="number" step="0.01" min="0" placeholder="0,00">
+        </div>
+        <div>
+          <label>Estoque</label>
+          <input id="produtoEstoque" type="number" step="1" min="0" placeholder="0">
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <button class="btn btn-primary" onclick="salvarProduto()">Salvar</button>
+        <button class="btn btn-ghost" onclick="limparFormProduto()">Limpar</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Cadastrados</h3>
+      <div id="listaProdutos"></div>
+    </div>
+  </section>
+
+  <!-- RESUMO -->
+  <section class="view" id="view-resumo">
+    <div class="section-head"><h2>Resumo</h2></div>
+    <div class="stat-grid" id="resumoStats"></div>
+    <div class="card" style="margin-top:12px;">
+      <h3>Por forma de pagamento (mês atual)</h3>
+      <div id="resumoFormas"></div>
+    </div>
+    <div class="card">
+      <h3>Produtos mais vendidos</h3>
+      <div id="resumoTopProdutos"></div>
+    </div>
+    <div class="card">
+      <h3>A receber (fiado pendente)</h3>
+      <div id="resumoPendentes"></div>
+    </div>
+  </section>
+
+</main>
+
+<nav class="tabs">
+  <button class="active" data-view="vendas" onclick="switchView('vendas')"><span class="ic">🧾</span>Vendas</button>
+  <button data-view="clientes" onclick="switchView('clientes')"><span class="ic">👤</span>Clientes</button>
+  <button data-view="produtos" onclick="switchView('produtos')"><span class="ic">📦</span>Produtos</button>
+  <button data-view="resumo" onclick="switchView('resumo')"><span class="ic">📊</span>Resumo</button>
+</nav>
+
+<!-- MODAL NOVA VENDA -->
+<div class="modal-bg" id="vendaModalBg">
+  <div class="modal">
+    <div class="section-head">
+      <h2>Nova venda</h2>
+      <button class="close-x" onclick="closeVendaModal()">✕</button>
+    </div>
+    <label>Cliente</label>
+    <select id="vendaCliente"></select>
+
+    <label>Adicionar item</label>
+    <div class="item-row">
+      <select id="vendaProdutoSelect" onchange="preencherPrecoItem()"></select>
+      <input id="vendaItemQtd" type="number" min="1" step="1" value="1" placeholder="Qtd">
+      <button class="btn btn-gold btn-sm" style="width:auto;" onclick="addItemVenda()">+</button>
+    </div>
+    <div class="chip-list" id="vendaItens"></div>
+
+    <label>Forma de pagamento</label>
+    <select id="vendaForma" class="forma-select">
+      <option>Pix</option>
+      <option>Dinheiro</option>
+      <option>Cartão débito</option>
+      <option>Cartão crédito</option>
+      <option>Fiado</option>
+    </select>
+
+    <label>Data</label>
+    <input id="vendaData" type="date">
+
+    <div class="total-line">
+      <span>Total</span>
+      <span id="vendaTotalDisplay">R$ 0,00</span>
+    </div>
+
+    <button class="btn btn-primary" style="margin-top:16px;" onclick="salvarVenda()">Registrar venda</button>
+  </div>
+</div>
+
+<script>
+/* ---------- storage helpers ---------- */
+const DB = {
+  get(key){ try{ return JSON.parse(localStorage.getItem(key)) || []; }catch(e){ return []; } },
+  set(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+};
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const fmtMoney = (n) => 'R$ ' + (Number(n)||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtDate = (iso) => { const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; };
+const todayISO = () => new Date().toISOString().slice(0,10);
+
+let clientes = DB.get('cv_clientes');
+let produtos = DB.get('cv_produtos');
+let vendas = DB.get('cv_vendas');
+let vendaItensTemp = [];
+
+/* ---------- nav ---------- */
+function switchView(name){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  if(name === 'clientes') renderClientes();
+  if(name === 'produtos') renderProdutos();
+  if(name === 'resumo') renderResumo();
+  if(name === 'vendas') renderVendas();
+}
+
+/* ---------- CLIENTES ---------- */
+function salvarCliente(){
+  const nome = document.getElementById('clienteNome').value.trim();
+  if(!nome){ alert('Informe o nome do cliente.'); return; }
+  const id = document.getElementById('clienteId').value;
+  const data = {
+    id: id || uid(),
+    nome,
+    telefone: document.getElementById('clienteTelefone').value.trim(),
+    endereco: document.getElementById('clienteEndereco').value.trim()
+  };
+  if(id){
+    clientes = clientes.map(c => c.id === id ? data : c);
+  } else {
+    clientes.push(data);
+  }
+  DB.set('cv_clientes', clientes);
+  limparFormCliente();
+  renderClientes();
+}
+function editarCliente(id){
+  const c = clientes.find(x => x.id === id);
+  if(!c) return;
+  document.getElementById('clienteId').value = c.id;
+  document.getElementById('clienteNome').value = c.nome;
+  document.getElementById('clienteTelefone').value = c.telefone || '';
+  document.getElementById('clienteEndereco').value = c.endereco || '';
+  document.getElementById('clienteFormTitle').textContent = 'Editar cliente';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function excluirCliente(id){
+  if(!confirm('Excluir este cliente? As vendas registradas não serão apagadas.')) return;
+  clientes = clientes.filter(c => c.id !== id);
+  DB.set('cv_clientes', clientes);
+  renderClientes();
+}
+function limparFormCliente(){
+  document.getElementById('clienteId').value = '';
+  document.getElementById('clienteNome').value = '';
+  document.getElementById('clienteTelefone').value = '';
+  document.getElementById('clienteEndereco').value = '';
+  document.getElementById('clienteFormTitle').textContent = 'Novo cliente';
+}
+function renderClientes(){
+  const el = document.getElementById('listaClientes');
+  if(!clientes.length){ el.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>'; return; }
+  el.innerHTML = clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `
+    <div class="list-item">
+      <div class="info">
+        <div class="name">${escapeHtml(c.nome)}</div>
+        <div class="meta">${escapeHtml(c.telefone || c.endereco || 'Sem dados de contato')}</div>
+      </div>
+      <div class="actions">
+        <button class="icon-btn" onclick="editarCliente('${c.id}')">Editar</button>
+        <button class="icon-btn del" onclick="excluirCliente('${c.id}')">Excluir</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ---------- PRODUTOS ---------- */
+function salvarProduto(){
+  const nome = document.getElementById('produtoNome').value.trim();
+  const preco = parseFloat(document.getElementById('produtoPreco').value);
+  if(!nome || isNaN(preco)){ alert('Informe nome e preço do produto.'); return; }
+  const estoque = parseInt(document.getElementById('produtoEstoque').value) || 0;
+  const id = document.getElementById('produtoId').value;
+  const data = { id: id || uid(), nome, preco, estoque };
+  if(id){
+    produtos = produtos.map(p => p.id === id ? data : p);
+  } else {
+    produtos.push(data);
+  }
+  DB.set('cv_produtos', produtos);
+  limparFormProduto();
+  renderProdutos();
+}
+function editarProduto(id){
+  const p = produtos.find(x => x.id === id);
+  if(!p) return;
+  document.getElementById('produtoId').value = p.id;
+  document.getElementById('produtoNome').value = p.nome;
+  document.getElementById('produtoPreco').value = p.preco;
+  document.getElementById('produtoEstoque').value = p.estoque;
+  document.getElementById('produtoFormTitle').textContent = 'Editar produto';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function excluirProduto(id){
+  if(!confirm('Excluir este produto?')) return;
+  produtos = produtos.filter(p => p.id !== id);
+  DB.set('cv_produtos', produtos);
+  renderProdutos();
+}
+function limparFormProduto(){
+  document.getElementById('produtoId').value = '';
+  document.getElementById('produtoNome').value = '';
+  document.getElementById('produtoPreco').value = '';
+  document.getElementById('produtoEstoque').value = '';
+  document.getElementById('produtoFormTitle').textContent = 'Novo produto';
+}
+function renderProdutos(){
+  const el = document.getElementById('listaProdutos');
+  if(!produtos.length){ el.innerHTML = '<div class="empty">Nenhum produto cadastrado ainda.</div>'; return; }
+  el.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `
+    <div class="list-item">
+      <div class="info">
+        <div class="name">${escapeHtml(p.nome)}</div>
+        <div class="meta">${fmtMoney(p.preco)} · estoque: ${p.estoque}${p.estoque <= 3 ? ' ⚠️' : ''}</div>
+      </div>
+      <div class="actions">
+        <button class="icon-btn" onclick="editarProduto('${p.id}')">Editar</button>
+        <button class="icon-btn del" onclick="excluirProduto('${p.id}')">Excluir</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ---------- VENDAS ---------- */
+function openVendaModal(){
+  if(!produtos.length){ alert('Cadastre ao menos um produto antes de registrar uma venda.'); switchView('produtos'); return; }
+  vendaItensTemp = [];
+  const cSel = document.getElementById('vendaCliente');
+  cSel.innerHTML = '<option value="">Consumidor não identificado</option>' +
+    clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+  const pSel = document.getElementById('vendaProdutoSelect');
+  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}">${escapeHtml(p.nome)} — ${fmtMoney(p.preco)}</option>`).join('');
+  document.getElementById('vendaItemQtd').value = 1;
+  document.getElementById('vendaForma').value = 'Pix';
+  document.getElementById('vendaData').value = todayISO();
+  renderVendaItens();
+  document.getElementById('vendaModalBg').classList.add('active');
+}
+function closeVendaModal(){
+  document.getElementById('vendaModalBg').classList.remove('active');
+}
+function addItemVenda(){
+  const produtoId = document.getElementById('vendaProdutoSelect').value;
+  const qtd = parseInt(document.getElementById('vendaItemQtd').value) || 1;
+  const produto = produtos.find(p => p.id === produtoId);
+  if(!produto) return;
+  const existente = vendaItensTemp.find(i => i.produtoId === produtoId);
+  if(existente){ existente.qtd += qtd; }
+  else { vendaItensTemp.push({ produtoId, nome: produto.nome, precoUnit: produto.preco, qtd }); }
+  document.getElementById('vendaItemQtd').value = 1;
+  renderVendaItens();
+}
+function removerItemVenda(produtoId){
+  vendaItensTemp = vendaItensTemp.filter(i => i.produtoId !== produtoId);
+  renderVendaItens();
+}
+function renderVendaItens(){
+  const el = document.getElementById('vendaItens');
+  const total = vendaItensTemp.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
+  el.innerHTML = vendaItensTemp.map(i => `
+    <div class="chip">
+      <span>${i.qtd}x ${escapeHtml(i.nome)} — ${fmtMoney(i.qtd * i.precoUnit)}</span>
+      <button onclick="removerItemVenda('${i.produtoId}')">✕</button>
+    </div>
+  `).join('') || '<div class="meta" style="color:var(--ink-soft); font-size:12.5px;">Nenhum item adicionado.</div>';
+  document.getElementById('vendaTotalDisplay').textContent = fmtMoney(total);
+}
+function salvarVenda(){
+  if(!vendaItensTemp.length){ alert('Adicione ao menos um item à venda.'); return; }
+  const clienteId = document.getElementById('vendaCliente').value;
+  const forma = document.getElementById('vendaForma').value;
+  const data = document.getElementById('vendaData').value || todayISO();
+  const total = vendaItensTemp.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
+  const venda = {
+    id: uid(),
+    data,
+    clienteId: clienteId || null,
+    itens: vendaItensTemp,
+    forma,
+    status: forma === 'Fiado' ? 'Pendente' : 'Pago',
+    total
+  };
+  vendas.push(venda);
+  DB.set('cv_vendas', vendas);
+  // baixa de estoque
+  vendaItensTemp.forEach(i => {
+    const p = produtos.find(p => p.id === i.produtoId);
+    if(p){ p.estoque = Math.max(0, (p.estoque||0) - i.qtd); }
+  });
+  DB.set('cv_produtos', produtos);
+  closeVendaModal();
+  renderVendas();
+}
+function marcarComoPago(id){
+  const v = vendas.find(v => v.id === id);
+  if(!v) return;
+  v.status = 'Pago';
+  DB.set('cv_vendas', vendas);
+  renderVendas();
+}
+function excluirVenda(id){
+  if(!confirm('Excluir esta venda? O estoque não será devolvido automaticamente.')) return;
+  vendas = vendas.filter(v => v.id !== id);
+  DB.set('cv_vendas', vendas);
+  renderVendas();
+}
+function nomeCliente(clienteId){
+  if(!clienteId) return 'Consumidor não identificado';
+  const c = clientes.find(c => c.id === clienteId);
+  return c ? c.nome : 'Cliente removido';
+}
+function popularFiltroMes(){
+  const sel = document.getElementById('filtroMes');
+  const meses = new Set(vendas.map(v => v.data.slice(0,7)));
+  meses.add(todayISO().slice(0,7));
+  const ordenados = Array.from(meses).sort().reverse();
+  const atual = sel.value || todayISO().slice(0,7);
+  sel.innerHTML = ordenados.map(m => `<option value="${m}">${labelMes(m)}</option>`).join('');
+  sel.value = ordenados.includes(atual) ? atual : ordenados[0];
+}
+function labelMes(ym){
+  const [y,m] = ym.split('-');
+  const nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  return `${nomes[parseInt(m)-1]} de ${y}`;
+}
+function renderVendas(){
+  popularFiltroMes();
+  const mesSel = document.getElementById('filtroMes').value;
+  const doMes = vendas.filter(v => v.data.slice(0,7) === mesSel);
+  const totalMes = doMes.reduce((s,v)=>s+v.total,0);
+  document.getElementById('vendasResumoMes').innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-size:12px; color:var(--ink-soft);">Total vendido no mês</div>
+        <div style="font-family:'Lora',serif; font-size:21px; font-weight:700; color:var(--green-deep);">${fmtMoney(totalMes)}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:12px; color:var(--ink-soft);">Vendas</div>
+        <div style="font-size:18px; font-weight:600;">${doMes.length}</div>
+      </div>
+    </div>
+  `;
+  const el = document.getElementById('listaVendas');
+  const ordenadas = doMes.slice().sort((a,b) => b.data.localeCompare(a.data) || b.id.localeCompare(a.id));
+  if(!ordenadas.length){ el.innerHTML = '<div class="empty">Nenhuma venda neste mês.</div>'; return; }
+  el.innerHTML = ordenadas.map(v => `
+    <div class="list-item">
+      <div class="info">
+        <div class="name">${escapeHtml(nomeCliente(v.clienteId))} <span class="badge ${v.status==='Pago'?'pago':'pendente'}">${v.status}</span></div>
+        <div class="meta">${fmtDate(v.data)} · ${v.forma} · ${v.itens.length} item(ns) · ${fmtMoney(v.total)}</div>
+      </div>
+      <div class="actions">
+        ${v.status==='Pendente' ? `<button class="icon-btn" onclick="marcarComoPago('${v.id}')">Pago</button>` : ''}
+        <button class="icon-btn del" onclick="excluirVenda('${v.id}')">Excluir</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ---------- RESUMO ---------- */
+function renderResumo(){
+  const mesAtual = todayISO().slice(0,7);
+  const doMes = vendas.filter(v => v.data.slice(0,7) === mesAtual);
+  const totalMes = doMes.reduce((s,v)=>s+v.total,0);
+  const totalPendente = vendas.filter(v=>v.status==='Pendente').reduce((s,v)=>s+v.total,0);
+
+  document.getElementById('resumoStats').innerHTML = `
+    <div class="stat"><div class="num">${fmtMoney(totalMes)}</div><div class="lbl">Vendido este mês</div></div>
+    <div class="stat gold"><div class="num">${doMes.length}</div><div class="lbl">Vendas este mês</div></div>
+  `;
+
+  const formas = {};
+  doMes.forEach(v => { formas[v.forma] = (formas[v.forma]||0) + v.total; });
+  const formasEl = document.getElementById('resumoFormas');
+  const formasKeys = Object.keys(formas);
+  formasEl.innerHTML = formasKeys.length ? formasKeys.map(f => `
+    <div class="list-item"><div class="info name">${f}</div><div>${fmtMoney(formas[f])}</div></div>
+  `).join('') : '<div class="empty">Sem dados este mês.</div>';
+
+  const contagem = {};
+  doMes.forEach(v => v.itens.forEach(i => { contagem[i.nome] = (contagem[i.nome]||0) + i.qtd; }));
+  const top = Object.entries(contagem).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  document.getElementById('resumoTopProdutos').innerHTML = top.length ? top.map(([nome,qtd]) => `
+    <div class="list-item"><div class="info name">${escapeHtml(nome)}</div><div>${qtd} un.</div></div>
+  `).join('') : '<div class="empty">Sem vendas este mês.</div>';
+
+  const pendentes = vendas.filter(v => v.status === 'Pendente').sort((a,b)=>a.data.localeCompare(b.data));
+  document.getElementById('resumoPendentes').innerHTML = pendentes.length ? `
+    ${pendentes.map(v => `
+      <div class="list-item">
+        <div class="info"><div class="name">${escapeHtml(nomeCliente(v.clienteId))}</div><div class="meta">${fmtDate(v.data)}</div></div>
+        <div>${fmtMoney(v.total)}</div>
+      </div>
+    `).join('')}
+    <div class="total-line"><span>Total a receber</span><span>${fmtMoney(totalPendente)}</span></div>
+  ` : '<div class="empty">Nenhum valor pendente 🎉</div>';
+}
+
+function escapeHtml(str){
+  return String(str ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+/* ---------- init ---------- */
+renderVendas();
+renderClientes();
+renderProdutos();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
