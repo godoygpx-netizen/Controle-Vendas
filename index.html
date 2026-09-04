@@ -706,7 +706,14 @@ function marcarComoPago(id){
   renderVendas();
 }
 function excluirVenda(id){
-  if(!confirm('Excluir esta venda? O estoque não será devolvido automaticamente.')) return;
+  const v = vendas.find(v => v.id === id);
+  if(!v) return;
+  if(!confirm('Excluir esta venda? Os produtos vendidos voltarão ao estoque.')) return;
+  v.itens.forEach(i => {
+    const p = produtos.find(p => p.id === i.produtoId);
+    if(p){ p.estoque = (p.estoque || 0) + i.qtd; }
+  });
+  DB.set('cv_produtos', produtos);
   vendas = vendas.filter(v => v.id !== id);
   DB.set('cv_vendas', vendas);
   renderVendas();
