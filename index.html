@@ -125,6 +125,11 @@
   }
   .novo-cliente-form label{margin-top:8px;}
   .novo-cliente-form label:first-child{margin-top:0;}
+  .aviso-estoque{
+    background:#FCF1DE; border:1px solid #EBD39A; border-radius:var(--radius);
+    padding:12px 14px; margin-bottom:12px; font-size:13.5px; color:#7A5310;
+  }
+  .aviso-estoque strong{display:block; margin-bottom:3px; font-size:14px;}
   .chip{
     display:flex; justify-content:space-between; align-items:center;
     background:var(--paper); border:1px solid var(--line); border-radius:9px;
@@ -248,6 +253,7 @@
       <h2>Vendas</h2>
       <button class="btn btn-primary btn-sm" onclick="openVendaModal()">+ Nova venda</button>
     </div>
+    <div id="avisoEstoqueBaixo"></div>
     <div class="filter-row">
       <select id="filtroMes"></select>
     </div>
@@ -347,6 +353,15 @@
       <label>Chave Pix (usada na mensagem de cobrança)</label>
       <input id="configPixKey" placeholder="CPF, e-mail, telefone ou chave aleatória" oninput="salvarConfig()">
     </div>
+    <div class="card">
+      <h3>Backup dos dados</h3>
+      <div class="meta" style="margin-bottom:12px;">Guarde uma cópia de segurança de clientes, produtos e vendas. Importante fazer de vez em quando, para não perder tudo se trocar de celular ou limpar o navegador.</div>
+      <div class="row">
+        <button class="btn btn-primary" onclick="exportarBackup()">Exportar backup</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('importarBackupInput').click()">Importar backup</button>
+      </div>
+      <input type="file" id="importarBackupInput" accept="application/json" style="display:none;" onchange="importarBackup(event)">
+    </div>
   </section>
 
 </main>
@@ -362,7 +377,7 @@
 <div class="modal-bg" id="vendaModalBg">
   <div class="modal">
     <div class="section-head">
-      <h2>Nova venda</h2>
+      <h2 id="vendaModalTitle">Nova venda</h2>
       <button class="close-x" onclick="closeVendaModal()">✕</button>
     </div>
     <label>Cliente</label>
@@ -403,7 +418,7 @@
       <span id="vendaTotalDisplay">R$ 0,00</span>
     </div>
 
-    <button class="btn btn-primary" style="margin-top:16px;" onclick="salvarVenda()">Registrar venda</button>
+    <button class="btn btn-primary" id="vendaSalvarBtn" style="margin-top:16px;" onclick="salvarVenda()">Registrar venda</button>
   </div>
 </div>
 
@@ -440,10 +455,56 @@ let clientes = DB.get('cv_clientes');
 let produtos = DB.get('cv_produtos');
 let vendas = DB.get('cv_vendas');
 let vendaItensTemp = [];
+let vendaEditId = null;
+let vendaEditOriginal = null;
+function estoqueEfetivo(produto){
+  if(!vendaEditOriginal) return produto.estoque;
+  const oi = vendaEditOriginal.itens.find(i => i.produtoId === produto.id);
+  return produto.estoque + (oi ? oi.qtd : 0);
+}
 let config = (() => { try{ return JSON.parse(localStorage.getItem('cv_config')) || {}; }catch(e){ return {}; } })();
 function salvarConfig(){
   config.pixKey = document.getElementById('configPixKey').value.trim();
   localStorage.setItem('cv_config', JSON.stringify(config));
+}
+function exportarBackup(){
+  const dados = { clientes, produtos, vendas, config, exportadoEm: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backup-controle-vendas-${todayISO()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function importarBackup(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let dados;
+    try{ dados = JSON.parse(e.target.result); }
+    catch(err){ alert('Arquivo inválido. Selecione um backup exportado por este app.'); return; }
+    if(!Array.isArray(dados.clientes) || !Array.isArray(dados.produtos) || !Array.isArray(dados.vendas)){
+      alert('Arquivo inválido. Selecione um backup exportado por este app.');
+      return;
+    }
+    if(!confirm('Importar este backup vai SUBSTITUIR todos os dados atuais (clientes, produtos e vendas). Deseja continuar?')) return;
+    clientes = dados.clientes;
+    produtos = dados.produtos;
+    vendas = dados.vendas;
+    config = dados.config || {};
+    DB.set('cv_clientes', clientes);
+    DB.set('cv_produtos', produtos);
+    DB.set('cv_vendas', vendas);
+    localStorage.setItem('cv_config', JSON.stringify(config));
+    renderClientes(); renderProdutos(); renderVendas(); renderResumo();
+    alert('Backup importado com sucesso!');
+    ev.target.value = '';
+  };
+  reader.readAsText(file);
 }
 
 /* ---------- nav ---------- */
@@ -702,18 +763,47 @@ function renderProdutos(){
 }
 
 /* ---------- VENDAS ---------- */
+function renderVendaProdutoOptions(){
+  const pSel = document.getElementById('vendaProdutoSelect');
+  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => {
+    const efetivo = estoqueEfetivo(p);
+    return `<option value="${p.id}" ${efetivo<=0?'disabled':''}>${escapeHtml(p.nome)} — ${fmtMoney(p.preco)} (${efetivo<=0?'sem estoque':'estoque: '+efetivo})</option>`;
+  }).join('');
+}
 function openVendaModal(){
   if(!produtos.length){ alert('Cadastre ao menos um produto antes de registrar uma venda.'); switchView('produtos'); return; }
+  vendaEditId = null;
+  vendaEditOriginal = null;
   vendaItensTemp = [];
+  document.getElementById('vendaModalTitle').textContent = 'Nova venda';
+  document.getElementById('vendaSalvarBtn').textContent = 'Registrar venda';
   document.getElementById('vendaClienteId').value = '';
   document.getElementById('vendaClienteBusca').value = '';
   document.getElementById('vendaClienteSugestoes').classList.remove('active');
   document.getElementById('vendaNovoClienteForm').style.display = 'none';
-  const pSel = document.getElementById('vendaProdutoSelect');
-  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}" ${p.estoque<=0?'disabled':''}>${escapeHtml(p.nome)} — ${fmtMoney(p.preco)} (${p.estoque<=0?'sem estoque':'estoque: '+p.estoque})</option>`).join('');
+  renderVendaProdutoOptions();
   document.getElementById('vendaItemQtd').value = 1;
   document.getElementById('vendaForma').value = 'Pix';
   document.getElementById('vendaData').value = todayISO();
+  renderVendaItens();
+  document.getElementById('vendaModalBg').classList.add('active');
+}
+function editarVenda(id){
+  const v = vendas.find(v => v.id === id);
+  if(!v) return;
+  vendaEditId = v.id;
+  vendaEditOriginal = JSON.parse(JSON.stringify(v));
+  vendaItensTemp = v.itens.map(i => ({...i}));
+  document.getElementById('vendaModalTitle').textContent = 'Editar venda';
+  document.getElementById('vendaSalvarBtn').textContent = 'Salvar alterações';
+  document.getElementById('vendaClienteId').value = v.clienteId || '';
+  document.getElementById('vendaClienteBusca').value = nomeCliente(v.clienteId);
+  document.getElementById('vendaClienteSugestoes').classList.remove('active');
+  document.getElementById('vendaNovoClienteForm').style.display = 'none';
+  renderVendaProdutoOptions();
+  document.getElementById('vendaItemQtd').value = 1;
+  document.getElementById('vendaForma').value = v.forma;
+  document.getElementById('vendaData').value = v.data;
   renderVendaItens();
   document.getElementById('vendaModalBg').classList.add('active');
 }
@@ -776,8 +866,9 @@ function addItemVenda(){
   if(!produto) return;
   const existente = vendaItensTemp.find(i => i.produtoId === produtoId);
   const jaNoCarrinho = existente ? existente.qtd : 0;
-  if(jaNoCarrinho + qtd > produto.estoque){
-    const disponivel = Math.max(0, produto.estoque - jaNoCarrinho);
+  const efetivo = estoqueEfetivo(produto);
+  if(jaNoCarrinho + qtd > efetivo){
+    const disponivel = Math.max(0, efetivo - jaNoCarrinho);
     alert(`Estoque insuficiente para "${produto.nome}". Disponível: ${disponivel} un.`);
     return;
   }
@@ -805,7 +896,7 @@ function salvarVenda(){
   if(!vendaItensTemp.length){ alert('Adicione ao menos um item à venda.'); return; }
   const semEstoque = vendaItensTemp.filter(i => {
     const p = produtos.find(p => p.id === i.produtoId);
-    return !p || i.qtd > p.estoque;
+    return !p || i.qtd > estoqueEfetivo(p);
   });
   if(semEstoque.length){
     alert('Não há estoque suficiente para: ' + semEstoque.map(i=>i.nome).join(', ') + '. Ajuste as quantidades antes de continuar.');
@@ -815,13 +906,27 @@ function salvarVenda(){
   const forma = document.getElementById('vendaForma').value;
   const data = document.getElementById('vendaData').value || todayISO();
   const total = vendaItensTemp.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
+
+  let status;
+  if(forma !== 'Fiado'){ status = 'Pago'; }
+  else { status = (vendaEditOriginal && vendaEditOriginal.forma === 'Fiado') ? vendaEditOriginal.status : 'Pendente'; }
+
+  if(vendaEditId){
+    // devolve ao estoque os itens da venda original antes de aplicar os novos
+    vendaEditOriginal.itens.forEach(i => {
+      const p = produtos.find(p => p.id === i.produtoId);
+      if(p){ p.estoque = (p.estoque || 0) + i.qtd; }
+    });
+    vendas = vendas.filter(v => v.id !== vendaEditId);
+  }
+
   const venda = {
-    id: uid(),
+    id: vendaEditId || uid(),
     data,
     clienteId: clienteId || null,
     itens: vendaItensTemp,
     forma,
-    status: forma === 'Fiado' ? 'Pendente' : 'Pago',
+    status,
     total
   };
   vendas.push(venda);
@@ -832,6 +937,8 @@ function salvarVenda(){
     if(p){ p.estoque = Math.max(0, (p.estoque||0) - i.qtd); }
   });
   DB.set('cv_produtos', produtos);
+  vendaEditId = null;
+  vendaEditOriginal = null;
   closeVendaModal();
   renderVendas();
 }
@@ -877,6 +984,17 @@ function linkCobrancaWhatsapp(venda){
   msg += `\n\nObrigado! 😊`;
   return `https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`;
 }
+function linkComprovanteWhatsapp(venda){
+  const tel = telefoneCliente(venda.clienteId);
+  if(!tel) return null;
+  let digitos = tel.replace(/\D/g, '');
+  if(digitos.length <= 11){ digitos = '55' + digitos; }
+  const nome = nomeCliente(venda.clienteId);
+  const listaItens = venda.itens.map(i => `- ${i.qtd}x ${i.nome}`).join('\n');
+  let msg = `Olá ${nome}! Aqui está o resumo da sua compra do dia ${fmtDate(venda.data)}:\n\n${listaItens}\n\nTotal: ${fmtMoney(venda.total)}\nForma de pagamento: ${venda.forma}`;
+  msg += `\n\nObrigado pela preferência! 😊`;
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`;
+}
 function popularFiltroMes(){
   const sel = document.getElementById('filtroMes');
   const meses = new Set(vendas.map(v => v.data.slice(0,7)));
@@ -893,6 +1011,17 @@ function labelMes(ym){
 }
 function renderVendas(){
   popularFiltroMes();
+  const zerados = produtos.filter(p => p.estoque <= 0);
+  const baixos = produtos.filter(p => p.estoque > 0 && p.estoque <= 3);
+  const avisoEl = document.getElementById('avisoEstoqueBaixo');
+  if(zerados.length || baixos.length){
+    const partes = [];
+    if(zerados.length) partes.push(`${zerados.length} sem estoque (${zerados.map(p=>escapeHtml(p.nome)).join(', ')})`);
+    if(baixos.length) partes.push(`${baixos.length} com estoque baixo (${baixos.map(p=>escapeHtml(p.nome)).join(', ')})`);
+    avisoEl.innerHTML = `<div class="aviso-estoque"><strong>⚠️ Atenção ao estoque</strong>${partes.join(' · ')}</div>`;
+  } else {
+    avisoEl.innerHTML = '';
+  }
   const mesSel = document.getElementById('filtroMes').value;
   const doMes = vendas.filter(v => v.data.slice(0,7) === mesSel);
   const totalMes = doMes.filter(v=>v.forma!=='Cortesia').reduce((s,v)=>s+v.total,0);
@@ -918,8 +1047,9 @@ function renderVendas(){
         <div class="meta">${fmtDate(v.data)} · ${v.forma} · ${v.itens.length} item(ns) · ${fmtMoney(v.total)}</div>
       </div>
       <div class="actions">
-        ${v.status==='Pendente' ? (linkCobrancaWhatsapp(v) ? `<a class="icon-btn whats" href="${linkCobrancaWhatsapp(v)}" target="_blank" rel="noopener">Cobrar</a>` : '') : ''}
+        ${v.status==='Pendente' ? (linkCobrancaWhatsapp(v) ? `<a class="icon-btn whats" href="${linkCobrancaWhatsapp(v)}" target="_blank" rel="noopener">Cobrar</a>` : '') : (linkComprovanteWhatsapp(v) ? `<a class="icon-btn whats" href="${linkComprovanteWhatsapp(v)}" target="_blank" rel="noopener">Comprovante</a>` : '')}
         ${v.status==='Pendente' ? `<button class="icon-btn" onclick="marcarComoPago('${v.id}')">Pago</button>` : ''}
+        <button class="icon-btn" onclick="editarVenda('${v.id}')">Editar</button>
         <button class="icon-btn del" onclick="excluirVenda('${v.id}')">Excluir</button>
       </div>
     </div>
