@@ -130,6 +130,22 @@
     padding:12px 14px; margin-bottom:12px; font-size:13.5px; color:#7A5310;
   }
   .aviso-estoque strong{display:block; margin-bottom:3px; font-size:14px;}
+  .voz-transcricao{
+    background:#EAF7EF; border:1px solid #bfe3cf; border-radius:9px;
+    padding:10px 12px; margin-bottom:12px; font-size:13px; color:#1e7d4c;
+  }
+  .voz-ouvindo{
+    position:fixed; inset:0; background:rgba(33,38,31,.6); z-index:30;
+    display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; color:#fff;
+  }
+  .voz-ouvindo.active{display:flex;}
+  .voz-ouvindo .mic-pulse{
+    width:70px; height:70px; border-radius:50%; background:var(--gold);
+    display:flex; align-items:center; justify-content:center; font-size:30px;
+    animation:pulse 1.2s infinite;
+  }
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(184,121,14,.6);} 70%{box-shadow:0 0 0 22px rgba(184,121,14,0);} 100%{box-shadow:0 0 0 0 rgba(184,121,14,0);}}
+  .voz-ouvindo .txt{font-size:14px; text-align:center; padding:0 30px;}
   .chip{
     display:flex; justify-content:space-between; align-items:center;
     background:var(--paper); border:1px solid var(--line); border-radius:9px;
@@ -251,7 +267,10 @@
   <section class="view active" id="view-vendas">
     <div class="section-head">
       <h2>Vendas</h2>
-      <button class="btn btn-primary btn-sm" onclick="openVendaModal()">+ Nova venda</button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-gold btn-sm" onclick="iniciarVendaPorVoz()" id="btnVendaVoz">🎤 Voz</button>
+        <button class="btn btn-primary btn-sm" onclick="openVendaModal()">+ Nova venda</button>
+      </div>
     </div>
     <div id="avisoEstoqueBaixo"></div>
     <div class="filter-row">
@@ -373,6 +392,12 @@
   <button data-view="resumo" onclick="switchView('resumo')"><span class="ic">📊</span>Resumo</button>
 </nav>
 
+<div class="voz-ouvindo" id="vozOuvindoOverlay">
+  <div class="mic-pulse">🎤</div>
+  <div class="txt" id="vozOuvindoTexto">Ouvindo... fale algo como<br>"2 amendoim doce para Maria, pix"</div>
+  <button class="btn btn-ghost btn-sm" style="width:auto; color:#fff; border-color:#fff;" onclick="cancelarVendaVoz()">Cancelar</button>
+</div>
+
 <!-- MODAL NOVA VENDA -->
 <div class="modal-bg" id="vendaModalBg">
   <div class="modal">
@@ -380,6 +405,7 @@
       <h2 id="vendaModalTitle">Nova venda</h2>
       <button class="close-x" onclick="closeVendaModal()">✕</button>
     </div>
+    <div id="vendaVozTranscricao" class="voz-transcricao" style="display:none;"></div>
     <label>Cliente</label>
     <input type="hidden" id="vendaClienteId" value="">
     <input type="text" id="vendaClienteBusca" placeholder="🔎 Buscar cliente ou deixar em branco..." autocomplete="off" oninput="filtrarClienteVenda()" onfocus="filtrarClienteVenda()">
@@ -794,6 +820,7 @@ function openVendaModal(){
   vendaItensTemp = [];
   document.getElementById('vendaModalTitle').textContent = 'Nova venda';
   document.getElementById('vendaSalvarBtn').textContent = 'Registrar venda';
+  document.getElementById('vendaVozTranscricao').style.display = 'none';
   document.getElementById('vendaClienteId').value = '';
   document.getElementById('vendaClienteBusca').value = '';
   document.getElementById('vendaClienteSugestoes').classList.remove('active');
@@ -811,6 +838,7 @@ function editarVenda(id){
   vendaEditId = v.id;
   vendaEditOriginal = JSON.parse(JSON.stringify(v));
   vendaItensTemp = v.itens.map(i => ({...i}));
+  document.getElementById('vendaVozTranscricao').style.display = 'none';
   document.getElementById('vendaModalTitle').textContent = 'Editar venda';
   document.getElementById('vendaSalvarBtn').textContent = 'Salvar alterações';
   document.getElementById('vendaClienteId').value = v.clienteId || '';
@@ -824,6 +852,121 @@ function editarVenda(id){
   renderVendaItens();
   document.getElementById('vendaModalBg').classList.add('active');
 }
+/* ---------- VENDA POR VOZ ---------- */
+const NUMEROS_PT = {
+  'um':1,'uma':1,'dois':2,'duas':2,'tres':3,'quatro':4,'cinco':5,'seis':6,'sete':7,'oito':8,'nove':9,'dez':10,
+  'onze':11,'doze':12,'treze':13,'catorze':14,'quatorze':14,'quinze':15,'vinte':20
+};
+function normalizarTexto(s){
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+function iniciarVendaPorVoz(){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    alert('Reconhecimento de voz não é suportado neste navegador. Essa função funciona no Chrome para Android.');
+    return;
+  }
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'pt-BR';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  window._vendaVozRecognition = recognition;
+  document.getElementById('vozOuvindoOverlay').classList.add('active');
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    document.getElementById('vozOuvindoOverlay').classList.remove('active');
+    processarComandoVoz(transcript);
+  };
+  recognition.onerror = (event) => {
+    document.getElementById('vozOuvindoOverlay').classList.remove('active');
+    if(event.error === 'no-speech'){ alert('Não ouvi nada. Tente novamente.'); }
+    else if(event.error === 'not-allowed' || event.error === 'service-not-allowed'){ alert('Permissão de microfone negada. Ative o microfone para este site nas configurações do navegador.'); }
+    else if(event.error !== 'aborted'){ alert('Não foi possível reconhecer o áudio. Tente novamente.'); }
+  };
+  recognition.onend = () => {
+    document.getElementById('vozOuvindoOverlay').classList.remove('active');
+  };
+  try{ recognition.start(); }
+  catch(e){ document.getElementById('vozOuvindoOverlay').classList.remove('active'); }
+}
+function cancelarVendaVoz(){
+  if(window._vendaVozRecognition){ try{ window._vendaVozRecognition.abort(); }catch(e){} }
+  document.getElementById('vozOuvindoOverlay').classList.remove('active');
+}
+function processarComandoVoz(transcriptOriginal){
+  if(!produtos.length){ alert('Cadastre ao menos um produto antes de registrar uma venda.'); switchView('produtos'); return; }
+  let texto = normalizarTexto(transcriptOriginal);
+
+  let forma = 'Pix';
+  if(/\bfiado\b/.test(texto)){ forma = 'Fiado'; texto = texto.replace(/\bfiado\b/g,''); }
+  else if(/\bcortesia\b/.test(texto)){ forma = 'Cortesia'; texto = texto.replace(/\bcortesia\b/g,''); }
+  else if(/\bpix\b/.test(texto)){ texto = texto.replace(/\bpix\b/g,''); }
+
+  let clienteNome = null;
+  const mCliente = texto.match(/\b(?:para|cliente)\s+([a-z\s]+)$/);
+  if(mCliente){
+    clienteNome = mCliente[1].trim();
+    texto = texto.slice(0, mCliente.index).trim();
+  }
+
+  texto = texto.replace(/^(registrar\s+)?(uma\s+)?venda\s+(de\s+)?/,'').trim();
+  texto = texto.replace(/^vend(er|i|eu)\s+/,'').trim();
+
+  let qtd = 1;
+  const mNum = texto.match(/^(\d+)\s+/);
+  if(mNum){
+    qtd = parseInt(mNum[1]);
+    texto = texto.slice(mNum[0].length).trim();
+  } else {
+    const palavras = texto.split(/\s+/);
+    if(palavras.length && NUMEROS_PT[palavras[0]] !== undefined){
+      qtd = NUMEROS_PT[palavras[0]];
+      texto = palavras.slice(1).join(' ').trim();
+    }
+  }
+  texto = texto.replace(/^de\s+/,'').trim();
+  const produtoTexto = texto;
+
+  let produtoEncontrado = null;
+  let melhorScore = 0;
+  produtos.forEach(p => {
+    const nomeNorm = normalizarTexto(p.nome);
+    if(produtoTexto.includes(nomeNorm) || nomeNorm.includes(produtoTexto)){
+      if(nomeNorm.length > melhorScore){ melhorScore = nomeNorm.length; produtoEncontrado = p; }
+    }
+  });
+
+  let clienteEncontrado = null;
+  if(clienteNome){
+    clienteEncontrado = clientes.find(c => {
+      const cNorm = normalizarTexto(c.nome);
+      return cNorm.includes(clienteNome) || clienteNome.includes(cNorm);
+    });
+  }
+
+  openVendaModal();
+  document.getElementById('vendaForma').value = forma;
+  if(clienteEncontrado){
+    selecionarClienteVenda(clienteEncontrado.id, clienteEncontrado.nome);
+  } else if(clienteNome){
+    document.getElementById('vendaClienteBusca').value = clienteNome.replace(/\b\w/g, c => c.toUpperCase());
+  }
+  let avisoExtra = '';
+  if(produtoEncontrado){
+    if(produtoEncontrado.estoque >= qtd){
+      vendaItensTemp.push({ produtoId: produtoEncontrado.id, nome: produtoEncontrado.nome, precoUnit: produtoEncontrado.preco, custoUnit: produtoEncontrado.custo||0, qtd });
+      renderVendaItens();
+    } else {
+      avisoExtra = `<br>⚠️ Reconheci "${escapeHtml(produtoEncontrado.nome)}", mas o estoque disponível é só ${produtoEncontrado.estoque}. Ajuste manualmente.`;
+    }
+  } else {
+    avisoExtra = '<br>⚠️ Não identifiquei o produto automaticamente — selecione manualmente abaixo.';
+  }
+  const transcricaoEl = document.getElementById('vendaVozTranscricao');
+  transcricaoEl.style.display = 'block';
+  transcricaoEl.innerHTML = `🎤 Você disse: "${escapeHtml(transcriptOriginal)}"${avisoExtra}`;
+}
+
 function filtrarClienteVenda(){
   const termoOriginal = document.getElementById('vendaClienteBusca').value.trim();
   const termo = termoOriginal.toLowerCase();
