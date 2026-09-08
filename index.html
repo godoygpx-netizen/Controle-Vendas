@@ -355,10 +355,10 @@
     </div>
     <div class="card">
       <h3>Backup dos dados</h3>
-      <div class="meta" style="margin-bottom:12px;">Guarde uma cópia de segurança de clientes, produtos e vendas. Importante fazer de vez em quando, para não perder tudo se trocar de celular ou limpar o navegador.</div>
+      <div class="meta" style="margin-bottom:12px;">Envie uma cópia de segurança para o Google Drive, e-mail ou WhatsApp — assim você não perde nada se trocar de celular ou limpar o navegador.</div>
       <div class="row">
-        <button class="btn btn-primary" onclick="exportarBackup()">Exportar backup</button>
-        <button class="btn btn-ghost" onclick="document.getElementById('importarBackupInput').click()">Importar backup</button>
+        <button class="btn btn-primary" onclick="exportarBackup()">Enviar backup</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('importarBackupInput').click()">Restaurar backup</button>
       </div>
       <input type="file" id="importarBackupInput" accept="application/json" style="display:none;" onchange="importarBackup(event)">
     </div>
@@ -467,13 +467,30 @@ function salvarConfig(){
   config.pixKey = document.getElementById('configPixKey').value.trim();
   localStorage.setItem('cv_config', JSON.stringify(config));
 }
-function exportarBackup(){
+async function exportarBackup(){
   const dados = { clientes, produtos, vendas, config, exportadoEm: new Date().toISOString() };
-  const blob = new Blob([JSON.stringify(dados, null, 2)], {type:'application/json'});
+  const json = JSON.stringify(dados, null, 2);
+  const filename = `backup-controle-vendas-${todayISO()}.json`;
+  const file = new File([json], filename, {type:'application/json'});
+
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({
+        files: [file],
+        title: 'Backup Controle de Vendas',
+        text: 'Backup dos dados do Controle de Vendas. Guarde este arquivo em um lugar seguro (Google Drive, e-mail, etc).'
+      });
+      return;
+    }catch(err){
+      if(err.name === 'AbortError') return; // usuário cancelou o compartilhamento
+      // se der erro no compartilhamento, cai no download tradicional abaixo
+    }
+  }
+  const blob = new Blob([json], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `backup-controle-vendas-${todayISO()}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
