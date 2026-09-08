@@ -214,6 +214,16 @@
   .prod-card-info .estoque-line .qtd{font-weight:700; color:var(--ink);}
   .prod-card-actions{display:flex; gap:6px;}
   .prod-card-actions .icon-btn{flex:1; text-align:center;}
+  .prod-card{transition:background .15s;}
+  .prod-card-top{touch-action:pan-y;}
+  .drag-handle{
+    color:var(--ink-soft); font-size:18px; padding:4px 2px; flex-shrink:0; align-self:center;
+    line-height:1; user-select:none;
+  }
+  .prod-card.dragging-card{
+    background:var(--gold-soft); border-radius:12px; box-shadow:0 6px 16px rgba(0,0,0,.15);
+    z-index:5; position:relative; opacity:0.95;
+  }
 
   nav.tabs{
     position:fixed; bottom:0; left:0; right:0;
@@ -480,6 +490,11 @@ const todayISO = () => new Date().toISOString().slice(0,10);
 let clientes = DB.get('cv_clientes');
 let produtos = DB.get('cv_produtos');
 let vendas = DB.get('cv_vendas');
+(function migrarOrdemProdutos(){
+  let precisaSalvar = false;
+  produtos.forEach((p, idx) => { if(p.ordem === undefined){ p.ordem = idx; precisaSalvar = true; } });
+  if(precisaSalvar) DB.set('cv_produtos', produtos);
+})();
 let vendaItensTemp = [];
 let vendaEditId = null;
 let vendaEditOriginal = null;
@@ -683,7 +698,9 @@ function salvarProduto(){
   const custo = parseFloat(document.getElementById('produtoCusto').value) || 0;
   const id = document.getElementById('produtoId').value;
   const foto = produtoFotoTemp;
-  const data = { id: id || uid(), nome, preco, custo, estoque, foto };
+  const ordemExistente = id ? produtos.find(p => p.id === id)?.ordem : undefined;
+  const ordem = ordemExistente !== undefined ? ordemExistente : produtos.length;
+  const data = { id: id || uid(), nome, preco, custo, estoque, foto, ordem };
   const listaAnterior = produtos;
   const novaLista = id ? produtos.map(p => p.id === id ? data : p) : [...produtos, data];
   try{
@@ -785,9 +802,9 @@ function renderProdutos(){
   `;
   const el = document.getElementById('listaProdutos');
   if(!produtos.length){ el.innerHTML = '<div class="empty">Nenhum produto cadastrado ainda.</div>'; return; }
-  const ordenados = produtos.slice().sort((a,b) => (a.estoque - b.estoque) || a.nome.localeCompare(b.nome));
+  const ordenados = produtos.slice().sort((a,b) => (a.ordem||0) - (b.ordem||0));
   el.innerHTML = ordenados.map(p => `
-    <div class="prod-card">
+    <div class="prod-card" data-id="${p.id}">
       <div class="prod-card-top">
         ${p.foto ? `<img class="prod-thumb" src="${p.foto}">` : `<div class="prod-thumb-placeholder">📦</div>`}
         <div class="prod-card-info">
@@ -795,6 +812,7 @@ function renderProdutos(){
           <div class="price-line">${fmtMoney(p.preco)}</div>
           <div class="estoque-line"><span class="qtd">${p.estoque} un.</span> em estoque ${estoqueBadge(p.estoque)}</div>
         </div>
+        <div class="drag-handle">⋮⋮</div>
       </div>
       <div class="prod-card-actions">
         <button class="icon-btn" onclick="abrirEntradaEstoque('${p.id}')">+ Estoque</button>
@@ -803,6 +821,68 @@ function renderProdutos(){
       </div>
     </div>
   `).join('');
+  enableDragReorderProdutos();
+}
+function enableDragReorderProdutos(){
+  const container = document.getElementById('listaProdutos');
+  let dragEl = null;
+  let startY = 0;
+  let longPressTimer = null;
+  let dragging = false;
+
+  container.querySelectorAll('.prod-card-top').forEach(top => {
+    top.addEventListener('touchstart', onStart, {passive:true});
+    top.addEventListener('touchmove', onMove, {passive:false});
+    top.addEventListener('touchend', onEnd);
+    top.addEventListener('touchcancel', onEnd);
+  });
+
+  function onStart(e){
+    const card = e.currentTarget.closest('.prod-card');
+    startY = e.touches[0].clientY;
+    longPressTimer = setTimeout(() => {
+      dragging = true;
+      dragEl = card;
+      card.classList.add('dragging-card');
+      if(navigator.vibrate) navigator.vibrate(15);
+    }, 420);
+  }
+  function onMove(e){
+    if(!dragging){
+      const dy = Math.abs(e.touches[0].clientY - startY);
+      if(dy > 8 && longPressTimer){ clearTimeout(longPressTimer); longPressTimer = null; }
+      return;
+    }
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    const currentCards = Array.from(container.querySelectorAll('.prod-card'));
+    const idx = currentCards.indexOf(dragEl);
+    for(const other of currentCards){
+      if(other === dragEl) continue;
+      const rect = other.getBoundingClientRect();
+      const mid = rect.top + rect.height/2;
+      const otherIdx = currentCards.indexOf(other);
+      if(y < mid && otherIdx < idx){ container.insertBefore(dragEl, other); break; }
+      else if(y > mid && otherIdx > idx){ container.insertBefore(dragEl, other.nextSibling); break; }
+    }
+  }
+  function onEnd(){
+    if(longPressTimer){ clearTimeout(longPressTimer); longPressTimer = null; }
+    if(dragging){
+      dragging = false;
+      dragEl.classList.remove('dragging-card');
+      salvarOrdemProdutos();
+      dragEl = null;
+    }
+  }
+}
+function salvarOrdemProdutos(){
+  const ids = Array.from(document.getElementById('listaProdutos').querySelectorAll('.prod-card')).map(c => c.dataset.id);
+  ids.forEach((id, idx) => {
+    const p = produtos.find(p => p.id === id);
+    if(p) p.ordem = idx;
+  });
+  DB.set('cv_produtos', produtos);
 }
 
 /* ---------- VENDAS ---------- */
