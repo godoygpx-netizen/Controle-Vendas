@@ -225,6 +225,18 @@
     z-index:5; position:relative; opacity:0.95;
   }
 
+  .auth-overlay{
+    position:fixed; inset:0; background:var(--paper); z-index:50;
+    display:none; align-items:center; justify-content:center; padding:24px;
+  }
+  .auth-overlay.active{display:flex;}
+  .auth-box{width:100%; max-width:360px;}
+  .auth-box label{display:block; font-size:12.5px; color:var(--ink-soft); margin:10px 0 4px; font-weight:500;}
+  .auth-box label:first-of-type{margin-top:0;}
+  .auth-box input{width:100%; padding:11px; border:1px solid var(--line); border-radius:9px; font-size:15px; background:#fff;}
+  .auth-erro{color:var(--danger); font-size:13px; margin-top:10px;}
+  .auth-carregando{color:var(--ink-soft); font-size:13px; margin-top:10px;}
+
   nav.tabs{
     position:fixed; bottom:0; left:0; right:0;
     background:var(--paper-raised); border-top:1px solid var(--line);
@@ -378,6 +390,11 @@
       <div id="resumoPendentes"></div>
     </div>
     <div class="card">
+      <h3>Conta</h3>
+      <div class="meta" style="margin-bottom:12px;">Conectado como: <strong id="contaEmailLabel" style="color:var(--ink);"></strong><br>Seus dados ficam salvos na nuvem e sincronizam automaticamente.</div>
+      <button class="btn btn-ghost" onclick="sairDaConta()">Sair da conta</button>
+    </div>
+    <div class="card">
       <h3>Configurações</h3>
       <label>Chave Pix (usada na mensagem de cobrança)</label>
       <input id="configPixKey" placeholder="CPF, e-mail, telefone ou chave aleatória" oninput="salvarConfig()">
@@ -476,11 +493,56 @@
   </div>
 </div>
 
+<!-- TELA DE LOGIN -->
+<div class="auth-overlay active" id="authOverlay">
+  <div class="auth-box">
+    <h1 style="font-family:'Lora',serif; color:var(--green-deep); margin-bottom:4px; font-size:24px;">Controle de Vendas</h1>
+    <div style="color:var(--ink-soft); font-size:13px; margin-bottom:18px;">Entre para acessar seus dados, salvos com segurança na nuvem</div>
+    <label>E-mail</label>
+    <input type="email" id="authEmail" placeholder="seuemail@exemplo.com" autocomplete="username">
+    <label>Senha</label>
+    <input type="password" id="authSenha" placeholder="Mínimo 6 caracteres" autocomplete="current-password">
+    <div id="authErro" class="auth-erro" style="display:none;"></div>
+    <div id="authCarregando" class="auth-carregando" style="display:none;">Carregando...</div>
+    <button class="btn btn-primary" style="margin-top:14px;" onclick="fazerLogin()">Entrar</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="fazerCadastro()">Criar conta</button>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px; width:100%; color:var(--ink-soft); border:none;" onclick="esqueciSenha()">Esqueci minha senha</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
+/* ---------- Firebase ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyAf957DxQwsf4GWLdLckgS8PqPpNjOe5B0",
+  authDomain: "controle-vendas-8ff0b.firebaseapp.com",
+  projectId: "controle-vendas-8ff0b",
+  storageBucket: "controle-vendas-8ff0b.firebasestorage.app",
+  messagingSenderId: "1043754940305",
+  appId: "1:1043754940305:web:053582c791cf537a978c30"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const firestore = firebase.firestore();
+try{ firestore.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
+
+let currentUser = null;
+let cloudSyncPronto = false;
+const CLOUD_KEYS = ['cv_clientes','cv_produtos','cv_vendas','cv_config'];
+
+function syncToCloud(key, value){
+  if(!currentUser || !cloudSyncPronto) return;
+  firestore.collection('usuarios').doc(currentUser.uid).collection('dados').doc(key)
+    .set({ payload: value, atualizadoEm: new Date().toISOString() })
+    .catch(err => console.error('Erro ao sincronizar', key, err));
+}
+
 /* ---------- storage helpers ---------- */
 const DB = {
   get(key){ try{ return JSON.parse(localStorage.getItem(key)) || []; }catch(e){ return []; } },
-  set(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+  set(key, val){ localStorage.setItem(key, JSON.stringify(val)); syncToCloud(key, val); }
 };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const fmtMoney = (n) => 'R$ ' + (Number(n)||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -490,11 +552,12 @@ const todayISO = () => new Date().toISOString().slice(0,10);
 let clientes = DB.get('cv_clientes');
 let produtos = DB.get('cv_produtos');
 let vendas = DB.get('cv_vendas');
-(function migrarOrdemProdutos(){
+function migrarOrdemProdutos(){
   let precisaSalvar = false;
   produtos.forEach((p, idx) => { if(p.ordem === undefined){ p.ordem = idx; precisaSalvar = true; } });
   if(precisaSalvar) DB.set('cv_produtos', produtos);
-})();
+}
+migrarOrdemProdutos();
 let vendaItensTemp = [];
 let vendaEditId = null;
 let vendaEditOriginal = null;
@@ -1344,6 +1407,95 @@ function renderResumo(){
 function escapeHtml(str){
   return String(str ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 }
+
+/* ---------- Autenticação ---------- */
+function mostrarErroAuth(msg){
+  const el = document.getElementById('authErro');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function traduzirErroFirebase(err){
+  const map = {
+    'auth/invalid-email':'E-mail inválido.',
+    'auth/user-not-found':'Usuário não encontrado. Toque em "Criar conta" se ainda não tem uma.',
+    'auth/wrong-password':'Senha incorreta.',
+    'auth/email-already-in-use':'Esse e-mail já tem uma conta. Toque em "Entrar".',
+    'auth/weak-password':'A senha precisa ter pelo menos 6 caracteres.',
+    'auth/invalid-credential':'E-mail ou senha incorretos.',
+    'auth/network-request-failed':'Sem conexão com a internet. Verifique sua rede e tente de novo.'
+  };
+  return map[err.code] || 'Não foi possível concluir. Tente novamente.';
+}
+function fazerLogin(){
+  const email = document.getElementById('authEmail').value.trim();
+  const senha = document.getElementById('authSenha').value;
+  document.getElementById('authErro').style.display = 'none';
+  if(!email || !senha){ mostrarErroAuth('Preencha e-mail e senha.'); return; }
+  document.getElementById('authCarregando').style.display = 'block';
+  auth.signInWithEmailAndPassword(email, senha)
+    .catch(err => mostrarErroAuth(traduzirErroFirebase(err)))
+    .finally(() => document.getElementById('authCarregando').style.display = 'none');
+}
+function fazerCadastro(){
+  const email = document.getElementById('authEmail').value.trim();
+  const senha = document.getElementById('authSenha').value;
+  document.getElementById('authErro').style.display = 'none';
+  if(!email || !senha){ mostrarErroAuth('Preencha e-mail e senha.'); return; }
+  if(senha.length < 6){ mostrarErroAuth('A senha precisa ter pelo menos 6 caracteres.'); return; }
+  document.getElementById('authCarregando').style.display = 'block';
+  auth.createUserWithEmailAndPassword(email, senha)
+    .catch(err => mostrarErroAuth(traduzirErroFirebase(err)))
+    .finally(() => document.getElementById('authCarregando').style.display = 'none');
+}
+function esqueciSenha(){
+  const email = document.getElementById('authEmail').value.trim();
+  document.getElementById('authErro').style.display = 'none';
+  if(!email){ mostrarErroAuth('Digite seu e-mail no campo acima e toque de novo.'); return; }
+  auth.sendPasswordResetEmail(email)
+    .then(() => alert('Enviamos um link para redefinir sua senha para ' + email))
+    .catch(err => mostrarErroAuth(traduzirErroFirebase(err)));
+}
+function sairDaConta(){
+  if(!confirm('Sair da conta? Você pode entrar de novo quando quiser, os dados continuam salvos na nuvem.')) return;
+  auth.signOut();
+}
+async function baixarDadosDaNuvem(userId){
+  const colecao = firestore.collection('usuarios').doc(userId).collection('dados');
+  let houveDadosNaNuvem = false;
+  for(const key of CLOUD_KEYS){
+    try{
+      const doc = await colecao.doc(key).get();
+      if(doc.exists){
+        houveDadosNaNuvem = true;
+        localStorage.setItem(key, JSON.stringify(doc.data().payload));
+      }
+    }catch(err){ console.error('Erro ao baixar', key, err); }
+  }
+  clientes = DB.get('cv_clientes');
+  produtos = DB.get('cv_produtos');
+  vendas = DB.get('cv_vendas');
+  config = (() => { try{ return JSON.parse(localStorage.getItem('cv_config')) || {}; }catch(e){ return {}; } })();
+  migrarOrdemProdutos();
+  renderClientes(); renderProdutos(); renderVendas(); renderResumo();
+
+  if(!houveDadosNaNuvem){
+    CLOUD_KEYS.forEach(key => syncToCloud(key, key === 'cv_config' ? config : DB.get(key)));
+  }
+}
+auth.onAuthStateChanged(async (user) => {
+  currentUser = user;
+  const overlay = document.getElementById('authOverlay');
+  if(user){
+    overlay.classList.remove('active');
+    document.getElementById('contaEmailLabel').textContent = user.email;
+    cloudSyncPronto = false;
+    await baixarDadosDaNuvem(user.uid);
+    cloudSyncPronto = true;
+  } else {
+    cloudSyncPronto = false;
+    overlay.classList.add('active');
+  }
+});
 
 /* ---------- init ---------- */
 renderVendas();
