@@ -210,6 +210,18 @@
   }
   .badge.pago{background:#DCEBDF; color:var(--green-deep);}
   .badge.pendente{background:#F6DCC9; color:var(--danger);}
+
+  @keyframes pulsarPendente{
+    0%, 100% { background: rgba(166,64,43,.05); box-shadow: 0 0 0 0 rgba(166,64,43,.28); }
+    50% { background: rgba(166,64,43,.14); box-shadow: 0 0 0 5px rgba(166,64,43,0); }
+  }
+  .list-item.pendente-destaque{
+    animation: pulsarPendente 1.7s ease-in-out infinite;
+    border-radius: 10px; padding-left: 10px; padding-right: 10px; margin: 0 -10px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    .list-item.pendente-destaque{ animation: none; background: rgba(166,64,43,.08); }
+  }
   .badge.estoque-ok{background:#DCEBDF; color:var(--green-deep);}
   .badge.estoque-baixo{background:#F6E7C9; color:var(--gold);}
   .badge.estoque-zero{background:#F6DCC9; color:var(--danger);}
@@ -2378,7 +2390,7 @@ function renderVendas(){
   const ordenadas = doMes.slice().sort((a,b) => b.data.localeCompare(a.data) || b.id.localeCompare(a.id));
   if(!ordenadas.length){ el.innerHTML = '<div class="empty">Nenhuma venda neste mês.</div>'; return; }
   el.innerHTML = ordenadas.map(v => `
-    <div class="list-item">
+    <div class="list-item${v.status==='Pendente' ? ' pendente-destaque' : ''}">
       <div class="info">
         <div class="name">${escapeHtml(nomeCliente(v.clienteId))} <span class="badge ${v.status==='Pago'?'pago':'pendente'}">${v.status}</span>${v.forma==='Cortesia' ? ' <span class="badge estoque-baixo">Cortesia</span>' : ''}</div>
         <div class="meta">${fmtDate(v.data)} · ${v.forma} · ${v.itens.length} item(ns) · ${fmtMoney(v.total)}${v.forma==='Dividido' ? ` (pago ${fmtMoney(v.valorPago||0)}, falta ${fmtMoney(v.valorFiado||0)})` : ''}</div>
@@ -2429,7 +2441,7 @@ function renderResumo(){
   const pendentes = vendas.filter(v => v.status === 'Pendente').sort((a,b)=>a.data.localeCompare(b.data));
   document.getElementById('resumoPendentes').innerHTML = pendentes.length ? `
     ${pendentes.map(v => `
-      <div class="list-item">
+      <div class="list-item pendente-destaque">
         <div class="info"><div class="name">${escapeHtml(nomeCliente(v.clienteId))}</div><div class="meta">${fmtDate(v.data)} · ${fmtMoney(valorPendenteVenda(v))}${v.forma==='Dividido' ? ' (dividido)' : ''}</div></div>
         ${linkCobrancaWhatsapp(v) ? `<a class="icon-btn whats" href="${linkCobrancaWhatsapp(v)}" target="_blank" rel="noopener">Cobrar</a>` : ''}
       </div>
