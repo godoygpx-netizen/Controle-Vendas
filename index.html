@@ -259,7 +259,16 @@
   .estoque-destaque .num{font-family:'IBM Plex Mono'; font-size:14px; font-weight:600;}
   .estoque-destaque.ok{background:rgba(78,139,123,.14); color:var(--ok); border-color:rgba(78,139,123,.35);}
   .estoque-destaque.baixo{background:rgba(232,163,61,.14); color:var(--green); border-color:rgba(232,163,61,.35);}
-  .estoque-destaque.zero{background:rgba(193,80,58,.14); color:#E08A76; border-color:rgba(193,80,58,.35);}
+  @keyframes piscarZerado{
+    0%, 100% { opacity:1; }
+    50% { opacity:.35; }
+  }
+  .estoque-destaque.zero{background:rgba(193,80,58,.14); color:#E08A76; border-color:rgba(193,80,58,.35); animation:piscarZerado 1.2s ease-in-out infinite;}
+  @media (prefers-reduced-motion: reduce){
+    .estoque-destaque.zero{ animation:none; }
+  }
+  .prod-card-top{cursor:pointer;}
+  .prod-card-acoes-wrap{margin-top:10px;}
   .estoque-destaque.casa{background:none; color:var(--ink-soft); border:1px dashed var(--line-strong); font-weight:500; font-size:12.5px;}
   .prod-card-actions{display:flex; gap:6px;}
   .prod-card-actions .icon-btn{flex:1; text-align:center;}
@@ -1997,7 +2006,7 @@ function renderProdutos(){
   const ordenados = produtos.slice().sort((a,b) => (a.ordem||0) - (b.ordem||0));
   el.innerHTML = ordenados.map(p => `
     <div class="prod-card" data-id="${p.id}">
-      <div class="prod-card-top">
+      <div class="prod-card-top" onclick="toggleProdutoAcoes('${p.id}', event)">
         ${p.foto ? `<img class="prod-thumb" src="${p.foto}">` : `<div class="prod-thumb-placeholder">📦</div>`}
         <div class="prod-card-info">
           <div class="name">${escapeHtml(p.nome)}</div>
@@ -2009,15 +2018,25 @@ function renderProdutos(){
         </div>
         <div class="drag-handle">⋮⋮</div>
       </div>
-      <div class="prod-card-actions">
-        <button class="icon-btn gold" onclick="abrirEntradaEstoque('${p.id}')">+ Estoque</button>
-        <button class="icon-btn" onclick="editarProduto('${p.id}')">Editar</button>
-        <button class="icon-btn del" onclick="excluirProduto('${p.id}')">Excluir</button>
+      <div class="prod-card-acoes-wrap" id="produtoAcoes-${p.id}" style="display:none;">
+        <div class="prod-card-actions">
+          <button class="icon-btn gold" onclick="abrirEntradaEstoque('${p.id}')">+ Estoque</button>
+          <button class="icon-btn" onclick="editarProduto('${p.id}')">Editar</button>
+          <button class="icon-btn del" onclick="excluirProduto('${p.id}')">Excluir</button>
+        </div>
+        ${(p.estoqueCasa||0) > 0 ? `<button class="icon-btn transferir" onclick="abrirTransferirEstoque('${p.id}')">🏠→🏢 Transferir de casa para o trabalho</button>` : ''}
       </div>
-      ${(p.estoqueCasa||0) > 0 ? `<button class="icon-btn transferir" onclick="abrirTransferirEstoque('${p.id}')">🏠→🏢 Transferir de casa para o trabalho</button>` : ''}
     </div>
   `).join('');
   enableDragReorderProdutos();
+}
+function toggleProdutoAcoes(id, ev){
+  if(ev && ev.target.closest('.drag-handle')) return;
+  const el = document.getElementById('produtoAcoes-' + id);
+  if(!el) return;
+  const abrir = el.style.display === 'none';
+  document.querySelectorAll('.prod-card-acoes-wrap').forEach(w => { if(w !== el) w.style.display = 'none'; });
+  el.style.display = abrir ? 'block' : 'none';
 }
 function enableDragReorderProdutos(){
   const container = document.getElementById('listaProdutos');
