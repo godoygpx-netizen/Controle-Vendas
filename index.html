@@ -2091,7 +2091,12 @@ function confirmarTransferirEstoque(){
 function renderProdutos(){
   const el = document.getElementById('listaProdutos');
   if(!produtos.length){ el.innerHTML = '<div class="empty">Nenhum produto cadastrado ainda.</div>'; return; }
-  const ordenados = produtos.slice().sort((a,b) => (a.ordem||0) - (b.ordem||0));
+  const ordenados = produtos.slice().sort((a,b) => {
+    const aTem = (a.estoque||0) > 0 ? 0 : 1;
+    const bTem = (b.estoque||0) > 0 ? 0 : 1;
+    if(aTem !== bTem) return aTem - bTem;
+    return (a.ordem||0) - (b.ordem||0);
+  });
   el.innerHTML = ordenados.map(p => `
     <div class="prod-card" data-id="${p.id}">
       <div class="prod-card-top" onclick="toggleProdutoAcoes('${p.id}', event)">
