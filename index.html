@@ -672,6 +672,19 @@
     <label>Observação (opcional)</label>
     <input id="encomendaObs" placeholder="Ex: cliente prefere entrega à tarde">
 
+    <label class="pedido-check" style="margin-top:14px;">
+      <input type="checkbox" id="encomendaJaPago" onchange="toggleEncomendaFormaPagamento()">
+      <span>💰 Cliente já pagou</span>
+    </label>
+    <div id="encomendaFormaPagamentoBox" style="display:none; margin-top:8px;">
+      <label>Forma de pagamento</label>
+      <select id="encomendaFormaPagamento">
+        <option>Pix</option>
+        <option>Dividido</option>
+        <option>Cortesia</option>
+      </select>
+    </div>
+
     <button class="btn btn-primary" style="margin-top:16px;" onclick="salvarEncomenda()">Salvar encomenda</button>
   </div>
 </div>
@@ -690,12 +703,15 @@
       <option value="trabalho">🏢 Estoque do trabalho</option>
       <option value="casa">🏠 Estoque de casa</option>
     </select>
-    <label>Forma de pagamento</label>
-    <select id="entregaForma">
-      <option>Pix</option>
-      <option>Fiado</option>
-      <option>Cortesia</option>
-    </select>
+    <div id="entregaJaPagoAviso" class="voz-transcricao" style="display:none; margin-top:12px;"></div>
+    <div id="entregaFormaGroup">
+      <label>Forma de pagamento</label>
+      <select id="entregaForma">
+        <option>Pix</option>
+        <option>Fiado</option>
+        <option>Cortesia</option>
+      </select>
+    </div>
     <button class="btn btn-primary" style="margin-top:16px;" onclick="confirmarEntregaEncomenda()">Confirmar entrega</button>
   </div>
 </div>
@@ -1080,8 +1096,15 @@ function openEncomendaModal(){
   pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('');
   document.getElementById('encomendaItemQtd').value = 1;
   document.getElementById('encomendaObs').value = '';
+  document.getElementById('encomendaJaPago').checked = false;
+  document.getElementById('encomendaFormaPagamento').value = 'Pix';
+  toggleEncomendaFormaPagamento();
   renderEncomendaItensTemp();
   document.getElementById('encomendaModalBg').classList.add('active');
+}
+function toggleEncomendaFormaPagamento(){
+  const marcado = document.getElementById('encomendaJaPago').checked;
+  document.getElementById('encomendaFormaPagamentoBox').style.display = marcado ? 'block' : 'none';
 }
 function closeEncomendaModal(){
   document.getElementById('encomendaModalBg').classList.remove('active');
@@ -1113,13 +1136,16 @@ function renderEncomendaItensTemp(){
 function salvarEncomenda(){
   if(!encomendaItensTemp.length){ alert('Adicione ao menos um item à encomenda.'); return; }
   const clienteId = document.getElementById('encomendaCliente').value;
+  const jaPago = document.getElementById('encomendaJaPago').checked;
   const encomenda = {
     id: uid(),
     clienteId: clienteId || null,
     itens: encomendaItensTemp,
     obs: document.getElementById('encomendaObs').value.trim(),
     data: todayISO(),
-    status: 'Pendente'
+    status: 'Pendente',
+    pago: jaPago,
+    formaPagamento: jaPago ? document.getElementById('encomendaFormaPagamento').value : null
   };
   encomendas.push(encomenda);
   DB.set('cv_encomendas', encomendas);
@@ -1140,7 +1166,17 @@ function abrirEntregaEncomenda(id){
   const itensTxt = enc.itens.map(i => `${fmtQtdItem(i)} ${i.nome}`).join(', ');
   document.getElementById('entregaEncomendaInfo').innerHTML = `<strong style="color:var(--ink);">${escapeHtml(nomeCliente(enc.clienteId))}</strong><br>${escapeHtml(itensTxt)}`;
   document.getElementById('entregaFonte').value = 'trabalho';
-  document.getElementById('entregaForma').value = 'Pix';
+  if(enc.pago){
+    document.getElementById('entregaForma').value = enc.formaPagamento || 'Pix';
+    document.getElementById('entregaFormaGroup').style.display = 'none';
+    const aviso = document.getElementById('entregaJaPagoAviso');
+    aviso.style.display = 'block';
+    aviso.textContent = `💰 Este cliente já pagou (${enc.formaPagamento || 'Pix'}) — sem precisar cobrar de novo.`;
+  } else {
+    document.getElementById('entregaForma').value = 'Pix';
+    document.getElementById('entregaFormaGroup').style.display = 'block';
+    document.getElementById('entregaJaPagoAviso').style.display = 'none';
+  }
   document.getElementById('entregaModalBg').classList.add('active');
 }
 function fecharEntregaEncomenda(){
@@ -1203,7 +1239,7 @@ function renderEncomendas(){
   elP.innerHTML = pendentes.length ? pendentes.map(e => `
     <div class="list-item">
       <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
-        <div class="name">${escapeHtml(nomeCliente(e.clienteId))}</div>
+        <div class="name">${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}</div>
         <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}</div>
         ${e.obs ? `<div class="meta">📌 ${escapeHtml(e.obs)}</div>` : ''}
       </div>
@@ -1232,9 +1268,10 @@ function abrirDetalheEncomenda(id){
   if(!e) return;
   const itensHtml = e.itens.map(i => `<div class="chip"><span>${fmtQtdItem(i)} ${escapeHtml(i.nome)}</span></div>`).join('');
   const statusBadge = e.status === 'Entregue' ? `<span class="badge pago">Entregue</span>` : `<span class="badge pendente">Pendente</span>`;
+  const pagoBadge = e.pago ? ` <span class="badge pago">💰 Pago (${escapeHtml(e.formaPagamento || 'Pix')})</span>` : '';
   document.getElementById('detalheEncomendaConteudo').innerHTML = `
     <div style="margin-bottom:12px;">
-      <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}</div>
+      <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}${pagoBadge}</div>
       <div class="meta">${fmtDate(e.data)}${e.status==='Entregue' ? (' · veio ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
     </div>
     <label>Itens</label>
