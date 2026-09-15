@@ -421,6 +421,8 @@
           <input id="produtoEstoqueCasa" type="number" step="1" min="0" placeholder="0">
         </div>
       </div>
+      <label>Unidade</label>
+      <input id="produtoUnidade" placeholder="un, kg, pacote, caixa...">
       <label>Foto</label>
       <div class="foto-row">
         <img id="produtoFotoPreview" class="foto-preview" style="display:none;">
@@ -728,6 +730,18 @@
   </div>
 </div>
 
+<!-- MODAL DETALHE ENCOMENDA -->
+<div class="modal-bg" id="detalheEncomendaModalBg">
+  <div class="modal">
+    <div class="sheet-handle"></div>
+    <div class="section-head">
+      <h2>Detalhes da encomenda</h2>
+      <button class="close-x" onclick="fecharDetalheEncomenda()">✕</button>
+    </div>
+    <div id="detalheEncomendaConteudo"></div>
+  </div>
+</div>
+
 <!-- TELA DE LOGIN -->
 <div class="auth-overlay active" id="authOverlay">
   <div class="auth-box">
@@ -925,7 +939,8 @@ async function gerarImagemCatalogo(lista){
 
     ctx.fillStyle = '#16301F';
     ctx.font = '700 21px Lora, serif';
-    ctx.fillText(fmtMoney(p.preco), x+14, y+cardH-14);
+    const precoTxt = fmtMoney(p.preco) + (unidadeProduto(p) !== 'un' ? ` / ${unidadeProduto(p)}` : '');
+    ctx.fillText(precoTxt, x+14, y+cardH-14);
   });
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
@@ -1078,7 +1093,7 @@ function addItemEncomenda(){
   if(!produto) return;
   const existente = encomendaItensTemp.find(i => i.produtoId === produtoId);
   if(existente){ existente.qtd += qtd; }
-  else { encomendaItensTemp.push({ produtoId, nome: produto.nome, qtd }); }
+  else { encomendaItensTemp.push({ produtoId, nome: produto.nome, unidade: unidadeProduto(produto), qtd }); }
   document.getElementById('encomendaItemQtd').value = 1;
   renderEncomendaItensTemp();
 }
@@ -1090,7 +1105,7 @@ function renderEncomendaItensTemp(){
   const el = document.getElementById('encomendaItens');
   el.innerHTML = encomendaItensTemp.map(i => `
     <div class="chip">
-      <span>${i.qtd}x ${escapeHtml(i.nome)}</span>
+      <span>${fmtQtdItem(i)} ${escapeHtml(i.nome)}</span>
       <button onclick="removerItemEncomenda('${i.produtoId}')">✕</button>
     </div>
   `).join('') || '<div class="meta" style="color:var(--ink-soft); font-size:12.5px;">Nenhum item adicionado.</div>';
@@ -1122,7 +1137,7 @@ function abrirEntregaEncomenda(id){
   const enc = encomendas.find(e => e.id === id);
   if(!enc) return;
   encomendaEntregaId = id;
-  const itensTxt = enc.itens.map(i => `${i.qtd}x ${i.nome}`).join(', ');
+  const itensTxt = enc.itens.map(i => `${fmtQtdItem(i)} ${i.nome}`).join(', ');
   document.getElementById('entregaEncomendaInfo').innerHTML = `<strong style="color:var(--ink);">${escapeHtml(nomeCliente(enc.clienteId))}</strong><br>${escapeHtml(itensTxt)}`;
   document.getElementById('entregaFonte').value = 'trabalho';
   document.getElementById('entregaForma').value = 'Pix';
@@ -1187,9 +1202,9 @@ function renderEncomendas(){
   const elP = document.getElementById('listaEncomendasPendentes');
   elP.innerHTML = pendentes.length ? pendentes.map(e => `
     <div class="list-item">
-      <div class="info">
+      <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
         <div class="name">${escapeHtml(nomeCliente(e.clienteId))}</div>
-        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${i.qtd}x ${escapeHtml(i.nome)}`).join(', ')}</div>
+        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}</div>
         ${e.obs ? `<div class="meta">📌 ${escapeHtml(e.obs)}</div>` : ''}
       </div>
       <div class="actions">
@@ -1202,15 +1217,38 @@ function renderEncomendas(){
   const elE = document.getElementById('listaEncomendasEntregues');
   elE.innerHTML = entregues.length ? entregues.map(e => `
     <div class="list-item">
-      <div class="info">
+      <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
         <div class="name">${escapeHtml(nomeCliente(e.clienteId))} <span class="badge pago">Entregue</span></div>
-        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${i.qtd}x ${escapeHtml(i.nome)}`).join(', ')} · veio ${e.entregueDe === 'casa' ? '🏠 de casa' : '🏢 do trabalho'}</div>
+        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')} · veio ${e.entregueDe === 'casa' ? '🏠 de casa' : '🏢 do trabalho'}</div>
       </div>
       <div class="actions">
         <button class="icon-btn del" onclick="excluirEncomenda('${e.id}')">Excluir</button>
       </div>
     </div>
   `).join('') : '<div class="empty">Nenhuma encomenda entregue ainda.</div>';
+}
+function abrirDetalheEncomenda(id){
+  const e = encomendas.find(x => x.id === id);
+  if(!e) return;
+  const itensHtml = e.itens.map(i => `<div class="chip"><span>${fmtQtdItem(i)} ${escapeHtml(i.nome)}</span></div>`).join('');
+  const statusBadge = e.status === 'Entregue' ? `<span class="badge pago">Entregue</span>` : `<span class="badge pendente">Pendente</span>`;
+  document.getElementById('detalheEncomendaConteudo').innerHTML = `
+    <div style="margin-bottom:12px;">
+      <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}</div>
+      <div class="meta">${fmtDate(e.data)}${e.status==='Entregue' ? (' · veio ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
+    </div>
+    <label>Itens</label>
+    <div class="chip-list">${itensHtml}</div>
+    ${e.obs ? `<label>Observação</label><div class="meta" style="white-space:normal;">📌 ${escapeHtml(e.obs)}</div>` : ''}
+    <div class="row" style="margin-top:18px;">
+      ${e.status === 'Pendente' ? `<button class="btn btn-primary" onclick="fecharDetalheEncomenda(); abrirEntregaEncomenda('${e.id}')">🚚 Entregar</button>` : ''}
+      <button class="btn btn-danger" onclick="fecharDetalheEncomenda(); excluirEncomenda('${e.id}')">Excluir</button>
+    </div>
+  `;
+  document.getElementById('detalheEncomendaModalBg').classList.add('active');
+}
+function fecharDetalheEncomenda(){
+  document.getElementById('detalheEncomendaModalBg').classList.remove('active');
 }
 
 /* ---------- FORNECEDORES / REPOSIÇÃO ---------- */
@@ -1287,12 +1325,12 @@ function renderPedidoProdutos(){
       <div class="pedido-item-top">
         <label class="pedido-check">
           <input type="checkbox" class="pedido-chk" data-id="${p.id}" ${marcado ? 'checked' : ''} onchange="atualizarTotalPedido()">
-          <span>${escapeHtml(p.nome)} <span class="meta">(estoque: ${p.estoque})</span></span>
+          <span>${escapeHtml(p.nome)} <span class="meta">(estoque: ${p.estoque} ${unidadeProduto(p)})</span></span>
         </label>
       </div>
       <div class="pedido-item-campos">
         <div class="campo">
-          <label>Quantidade</label>
+          <label>Quantidade (${unidadeProduto(p)})</label>
           <input type="number" min="1" step="1" class="pedido-qtd" data-id="${p.id}" placeholder="Qtd" value="${sugestao}" oninput="atualizarTotalPedido()">
         </div>
         <div class="campo">
@@ -1342,7 +1380,7 @@ function enviarPedidoWhatsapp(){
       if(qtd > 0){
         const produto = produtos.find(p => p.id === id);
         if(produto){
-          itens.push(`- ${qtd}x ${produto.nome}`);
+          itens.push(`- ${qtd} ${unidadeProduto(produto)} de ${produto.nome}`);
           totalPedido += qtd * custo;
         }
       }
@@ -1523,12 +1561,13 @@ function salvarProduto(){
   if(!nome || isNaN(preco)){ alert('Informe nome e preço do produto.'); return; }
   const estoque = parseInt(document.getElementById('produtoEstoque').value) || 0;
   const estoqueCasa = parseInt(document.getElementById('produtoEstoqueCasa').value) || 0;
+  const unidade = document.getElementById('produtoUnidade').value.trim() || 'un';
   const custo = parseFloat(document.getElementById('produtoCusto').value) || 0;
   const id = document.getElementById('produtoId').value;
   const foto = produtoFotoTemp;
   const ordemExistente = id ? produtos.find(p => p.id === id)?.ordem : undefined;
   const ordem = ordemExistente !== undefined ? ordemExistente : produtos.length;
-  const data = { id: id || uid(), nome, preco, custo, estoque, estoqueCasa, foto, ordem };
+  const data = { id: id || uid(), nome, preco, custo, estoque, estoqueCasa, unidade, foto, ordem };
   const listaAnterior = produtos;
   const novaLista = id ? produtos.map(p => p.id === id ? data : p) : [...produtos, data];
   try{
@@ -1552,6 +1591,7 @@ function editarProduto(id){
   document.getElementById('produtoCusto').value = p.custo || '';
   document.getElementById('produtoEstoque').value = p.estoque;
   document.getElementById('produtoEstoqueCasa').value = p.estoqueCasa || 0;
+  document.getElementById('produtoUnidade').value = p.unidade || 'un';
   produtoFotoTemp = p.foto || null;
   if(p.foto){
     document.getElementById('produtoFotoPreview').src = p.foto;
@@ -1579,6 +1619,7 @@ function limparFormProduto(){
   document.getElementById('produtoCusto').value = '';
   document.getElementById('produtoEstoque').value = '';
   document.getElementById('produtoEstoqueCasa').value = '';
+  document.getElementById('produtoUnidade').value = '';
   document.getElementById('produtoFormTitle').textContent = 'Novo produto';
   removerFotoProduto();
 }
@@ -1609,10 +1650,10 @@ function atualizarPreviaEntrada(){
   const destino = document.getElementById('entradaDestino').value;
   if(destino === 'casa'){
     document.getElementById('entradaEstoqueLabel').textContent = 'Estoque em casa após entrada';
-    document.getElementById('entradaEstoqueFinal').textContent = ((p.estoqueCasa||0) + qtd) + ' un.';
+    document.getElementById('entradaEstoqueFinal').textContent = ((p.estoqueCasa||0) + qtd) + ' ' + unidadeProduto(p);
   } else {
     document.getElementById('entradaEstoqueLabel').textContent = 'Estoque no trabalho após entrada';
-    document.getElementById('entradaEstoqueFinal').textContent = (p.estoque + qtd) + ' un.';
+    document.getElementById('entradaEstoqueFinal').textContent = (p.estoque + qtd) + ' ' + unidadeProduto(p);
   }
 }
 function confirmarEntradaEstoque(){
@@ -1648,14 +1689,14 @@ function atualizarPreviaTransferencia(){
   const qtd = parseInt(document.getElementById('transferirQtd').value) || 0;
   const casaDepois = Math.max(0, (p.estoqueCasa||0) - qtd);
   const trabalhoDepois = p.estoque + qtd;
-  document.getElementById('transferirPrevia').textContent = `🏠 ${casaDepois} · 🏢 ${trabalhoDepois}`;
+  document.getElementById('transferirPrevia').textContent = `🏠 ${casaDepois} · 🏢 ${trabalhoDepois} (${unidadeProduto(p)})`;
 }
 function confirmarTransferirEstoque(){
   const p = produtos.find(x => x.id === transferirProdutoId);
   if(!p) return;
   const qtd = parseInt(document.getElementById('transferirQtd').value);
   if(!qtd || qtd <= 0){ alert('Informe uma quantidade válida.'); return; }
-  if(qtd > (p.estoqueCasa || 0)){ alert(`Você só tem ${p.estoqueCasa || 0} un. em casa.`); return; }
+  if(qtd > (p.estoqueCasa || 0)){ alert(`Você só tem ${p.estoqueCasa || 0} ${unidadeProduto(p)} em casa.`); return; }
   p.estoqueCasa = (p.estoqueCasa || 0) - qtd;
   p.estoque = (p.estoque || 0) + qtd;
   DB.set('cv_produtos', produtos);
@@ -1687,8 +1728,8 @@ function renderProdutos(){
         <div class="prod-card-info">
           <div class="name">${escapeHtml(p.nome)}</div>
           <div class="price-line">${fmtMoney(p.preco)}</div>
-          <div class="estoque-line"><span class="qtd">${p.estoque} un.</span> no trabalho ${estoqueBadge(p.estoque)}</div>
-          <div class="estoque-line-casa">🏠 ${p.estoqueCasa || 0} un. em casa</div>
+          <div class="estoque-line"><span class="qtd">${p.estoque} ${unidadeProduto(p)}</span> no trabalho ${estoqueBadge(p.estoque)}</div>
+          <div class="estoque-line-casa">🏠 ${p.estoqueCasa || 0} ${unidadeProduto(p)} em casa</div>
         </div>
         <div class="drag-handle">⋮⋮</div>
       </div>
@@ -1769,7 +1810,7 @@ function renderVendaProdutoOptions(){
   const pSel = document.getElementById('vendaProdutoSelect');
   pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => {
     const efetivo = estoqueEfetivo(p);
-    return `<option value="${p.id}" ${efetivo<=0?'disabled':''}>${escapeHtml(p.nome)} — ${fmtMoney(p.preco)} (${efetivo<=0?'sem estoque':'estoque: '+efetivo})</option>`;
+    return `<option value="${p.id}" ${efetivo<=0?'disabled':''}>${escapeHtml(p.nome)} — ${fmtMoney(p.preco)} (${efetivo<=0?'sem estoque':'estoque: '+efetivo+' '+unidadeProduto(p)})</option>`;
   }).join('');
 }
 function openVendaModal(){
@@ -1990,11 +2031,11 @@ function addItemVenda(){
   const efetivo = estoqueEfetivo(produto);
   if(jaNoCarrinho + qtd > efetivo){
     const disponivel = Math.max(0, efetivo - jaNoCarrinho);
-    alert(`Estoque insuficiente para "${produto.nome}". Disponível: ${disponivel} un.`);
+    alert(`Estoque insuficiente para "${produto.nome}". Disponível: ${disponivel} ${unidadeProduto(produto)}.`);
     return;
   }
   if(existente){ existente.qtd += qtd; }
-  else { vendaItensTemp.push({ produtoId, nome: produto.nome, precoUnit: produto.preco, custoUnit: produto.custo || 0, qtd }); }
+  else { vendaItensTemp.push({ produtoId, nome: produto.nome, precoUnit: produto.preco, custoUnit: produto.custo || 0, unidade: unidadeProduto(produto), qtd }); }
   document.getElementById('vendaItemQtd').value = 1;
   renderVendaItens();
 }
@@ -2007,7 +2048,7 @@ function renderVendaItens(){
   const total = vendaItensTemp.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
   el.innerHTML = vendaItensTemp.map(i => `
     <div class="chip">
-      <span>${i.qtd}x ${escapeHtml(i.nome)} — ${fmtMoney(i.qtd * i.precoUnit)}</span>
+      <span>${fmtQtdItem(i)} ${escapeHtml(i.nome)} — ${fmtMoney(i.qtd * i.precoUnit)}</span>
       <button onclick="removerItemVenda('${i.produtoId}')">✕</button>
     </div>
   `).join('') || '<div class="meta" style="color:var(--ink-soft); font-size:12.5px;">Nenhum item adicionado.</div>';
@@ -2132,7 +2173,7 @@ function linkCobrancaWhatsapp(venda){
   let digitos = tel.replace(/\D/g, '');
   if(digitos.length <= 11){ digitos = '55' + digitos; } // adiciona DDI Brasil se não tiver
   const nome = nomeCliente(venda.clienteId);
-  const listaItens = venda.itens.map(i => `- ${i.qtd}x ${i.nome}`).join('\n');
+  const listaItens = venda.itens.map(i => `- ${fmtQtdItem(i)} ${i.nome}`).join('\n');
   const pendente = valorPendenteVenda(venda);
   let msg = `Olá ${nome}! Passando para lembrar do pagamento pendente referente à compra do dia ${fmtDate(venda.data)}:\n\n${listaItens}\n\nTotal da compra: ${fmtMoney(venda.total)}`;
   if(venda.forma === 'Dividido'){ msg += `\nJá pago: ${fmtMoney(venda.valorPago||0)}\nFalta: ${fmtMoney(pendente)}`; }
@@ -2146,7 +2187,7 @@ function linkComprovanteWhatsapp(venda){
   let digitos = tel.replace(/\D/g, '');
   if(digitos.length <= 11){ digitos = '55' + digitos; }
   const nome = nomeCliente(venda.clienteId);
-  const listaItens = venda.itens.map(i => `- ${i.qtd}x ${i.nome}`).join('\n');
+  const listaItens = venda.itens.map(i => `- ${fmtQtdItem(i)} ${i.nome}`).join('\n');
   let msg = `Olá ${nome}! Aqui está o resumo da sua compra do dia ${fmtDate(venda.data)}:\n\n${listaItens}\n\nTotal: ${fmtMoney(venda.total)}\nForma de pagamento: ${venda.forma}`;
   if(venda.forma === 'Dividido'){ msg += ` (pago ${fmtMoney(venda.valorPago||0)}, restante ${fmtMoney(venda.valorFiado||0)})`; }
   msg += `\n\nObrigado pela preferência! 😊`;
@@ -2258,6 +2299,13 @@ function renderResumo(){
   ` : '<div class="empty">Nenhum valor pendente 🎉</div>';
 }
 
+function fmtQtdItem(item){
+  const u = item.unidade || 'un';
+  return u === 'un' ? `${item.qtd}x` : `${item.qtd} ${u}`;
+}
+function unidadeProduto(p){
+  return (p && p.unidade) || 'un';
+}
 function escapeHtml(str){
   return String(str ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 }
