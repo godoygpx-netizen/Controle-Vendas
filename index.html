@@ -507,6 +507,7 @@
       <h2>Encomendas</h2>
       <button class="btn btn-primary btn-sm" onclick="openEncomendaModal()">+ Nova encomenda</button>
     </div>
+    <div id="checklistSepararCard"></div>
     <div class="card">
       <h3>Pendentes</h3>
       <div id="listaEncomendasPendentes"></div>
@@ -1409,12 +1410,14 @@ function renderEncomendas(){
   const pendentes = encomendas.filter(e => e.status === 'Pendente').sort((a,b)=>a.data.localeCompare(b.data));
   const entregues = encomendas.filter(e => e.status === 'Entregue').sort((a,b)=>b.data.localeCompare(a.data));
 
+  renderChecklistSeparar(pendentes);
+
   const elP = document.getElementById('listaEncomendasPendentes');
   elP.innerHTML = pendentes.length ? pendentes.map(e => `
     <div class="list-item">
       <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
-        <div class="name">${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}</div>
-        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}${e.estoqueReservado ? ` · reservado ${e.fonteEstoque === 'casa' ? '🏠 em casa' : '🏢 no trabalho'}` : ''}</div>
+        <div class="name">${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}${e.estoqueReservado ? ' <span class="badge estoque-ok">✅ Descontado</span>' : ''}</div>
+        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}${e.estoqueReservado ? ` · ${e.fonteEstoque === 'casa' ? '🏠 trazer de casa' : '🏢 já está no trabalho'}` : ''}</div>
         ${!e.estoqueReservado ? `<div class="meta" style="color:var(--danger); font-weight:600;">⚠️ Estoque ainda não reservado — toque em Editar e salve para corrigir</div>` : ''}
         ${e.obs ? `<div class="meta">📌 ${escapeHtml(e.obs)}</div>` : ''}
       </div>
@@ -1439,16 +1442,42 @@ function renderEncomendas(){
     </div>
   `).join('') : '<div class="empty">Nenhuma encomenda entregue ainda.</div>';
 }
+function renderChecklistSeparar(pendentes){
+  const el = document.getElementById('checklistSepararCard');
+  const daCasa = pendentes.filter(e => e.fonteEstoque === 'casa');
+  if(!daCasa.length){ el.innerHTML = ''; return; }
+  const totais = {};
+  daCasa.forEach(e => {
+    e.itens.forEach(i => {
+      if(!totais[i.nome]){ totais[i.nome] = { qtd: 0, unidade: i.unidade || 'un' }; }
+      totais[i.nome].qtd += i.qtd;
+    });
+  });
+  const linhas = Object.entries(totais).map(([nome, info]) => `
+    <div class="list-item">
+      <div class="info name">${escapeHtml(nome)}</div>
+      <div style="font-weight:700; color:var(--ink);">${fmtQtdItem({qtd: info.qtd, unidade: info.unidade})}</div>
+    </div>
+  `).join('');
+  el.innerHTML = `
+    <div class="card" style="border-left:4px solid var(--gold); background:#FFFBF2;">
+      <h3 style="border-left:none; padding-left:0;">🎒 Separar de casa para levar</h3>
+      <div class="meta" style="margin-bottom:8px;">Some tudo isso de ${daCasa.length} encomenda(s) ainda não entregue(s):</div>
+      ${linhas}
+    </div>
+  `;
+}
 function abrirDetalheEncomenda(id){
   const e = encomendas.find(x => x.id === id);
   if(!e) return;
   const itensHtml = e.itens.map(i => `<div class="chip"><span>${fmtQtdItem(i)} ${escapeHtml(i.nome)}</span></div>`).join('');
   const statusBadge = e.status === 'Entregue' ? `<span class="badge pago">Entregue</span>` : `<span class="badge pendente">Pendente</span>`;
   const pagoBadge = e.pago ? ` <span class="badge pago">💰 Pago (${escapeHtml(e.formaPagamento || 'Pix')})</span>` : '';
+  const estoqueBadgeTxt = e.estoqueReservado ? ` <span class="badge estoque-ok">✅ Descontado</span>` : ` <span class="badge estoque-zero">⚠️ Não descontado</span>`;
   document.getElementById('detalheEncomendaConteudo').innerHTML = `
     <div style="margin-bottom:12px;">
-      <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}${pagoBadge}</div>
-      <div class="meta">${fmtDate(e.data)}${e.estoqueReservado ? ` · reservado ${e.fonteEstoque==='casa' ? '🏠 em casa' : '🏢 no trabalho'}` : ' · ⚠️ estoque ainda não reservado'}${e.status==='Entregue' ? (' · entregue ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
+      <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}${pagoBadge}${e.status === 'Pendente' ? estoqueBadgeTxt : ''}</div>
+      <div class="meta">${fmtDate(e.data)}${e.estoqueReservado ? ` · descontado ${e.fonteEstoque==='casa' ? '🏠 do estoque de casa' : '🏢 do estoque do trabalho'}` : ' · ⚠️ estoque ainda não descontado'}${e.status==='Entregue' ? (' · entregue ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
     </div>
     <label>Itens</label>
     <div class="chip-list">${itensHtml}</div>
