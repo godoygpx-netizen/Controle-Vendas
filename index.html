@@ -1206,11 +1206,18 @@ function renderClientes(){
         <div class="meta">${escapeHtml(c.telefone || c.endereco || 'Sem dados de contato')}</div>
       </div>
       <div class="actions">
+        ${linkWhatsappLivre(c) ? `<a class="icon-btn whats" href="${linkWhatsappLivre(c)}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ''}
         <button class="icon-btn" onclick="editarCliente('${c.id}')">Editar</button>
         <button class="icon-btn del" onclick="excluirCliente('${c.id}')">Excluir</button>
       </div>
     </div>
   `).join('');
+}
+function linkWhatsappLivre(cliente){
+  if(!cliente.telefone) return null;
+  let digitos = cliente.telefone.replace(/\D/g, '');
+  if(digitos.length <= 11){ digitos = '55' + digitos; }
+  return whatsappUrl(digitos, '');
 }
 
 /* ---------- PRODUTOS ---------- */
