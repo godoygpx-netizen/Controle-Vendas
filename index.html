@@ -394,6 +394,7 @@
   <section class="view" id="view-produtos">
     <div class="section-head">
       <h2>Produtos</h2>
+      <button class="btn btn-gold btn-sm" onclick="abrirCatalogoModal()">📋 Catálogo</button>
     </div>
     <div class="card">
       <h3 id="produtoFormTitle">Novo produto</h3>
@@ -712,6 +713,21 @@
   </div>
 </div>
 
+<!-- MODAL CATÁLOGO -->
+<div class="modal-bg" id="catalogoModalBg">
+  <div class="modal">
+    <div class="sheet-handle"></div>
+    <div class="section-head">
+      <h2>Gerar catálogo</h2>
+      <button class="close-x" onclick="fecharCatalogoModal()">✕</button>
+    </div>
+    <div class="meta" style="margin-bottom:10px;">Escolha os produtos que vão aparecer na imagem do catálogo.</div>
+    <div id="catalogoListaProdutos"></div>
+    <button class="btn btn-primary" style="margin-top:14px;" onclick="gerarEEnviarCatalogo()">📤 Gerar e enviar</button>
+    <div id="catalogoCarregando" class="auth-carregando" style="display:none; text-align:center; margin-top:10px;">Gerando imagem, aguarde...</div>
+  </div>
+</div>
+
 <!-- TELA DE LOGIN -->
 <div class="auth-overlay active" id="authOverlay">
   <div class="auth-box">
@@ -790,6 +806,178 @@ function salvarConfig(){
   config.pixKey = document.getElementById('configPixKey').value.trim();
   localStorage.setItem('cv_config', JSON.stringify(config));
 }
+/* ---------- CATÁLOGO EM IMAGEM ---------- */
+function roundRectCatalogo(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+function wrapTextCatalogo(ctx, text, x, y, maxWidth, lineHeight, maxLines){
+  const words = text.split(' ');
+  let line = '';
+  let curY = y;
+  let linhas = 0;
+  for(let n=0; n<words.length; n++){
+    const testLine = line + words[n] + ' ';
+    if(ctx.measureText(testLine).width > maxWidth && line !== ''){
+      ctx.fillText(line.trim(), x, curY);
+      line = words[n] + ' ';
+      curY += lineHeight;
+      linhas++;
+      if(linhas >= maxLines - 1){
+        ctx.fillText((line + words.slice(n+1).join(' ')).trim(), x, curY);
+        return;
+      }
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line.trim(), x, curY);
+}
+async function gerarImagemCatalogo(lista){
+  try{
+    await Promise.all([
+      document.fonts.load('700 30px Lora'),
+      document.fonts.load('700 20px Lora'),
+      document.fonts.load('600 16px Inter'),
+      document.fonts.load('700 18px Inter')
+    ]);
+  }catch(e){}
+
+  const cols = 2;
+  const pad = 24;
+  const cardW = 330;
+  const photoH = 260;
+  const cardH = photoH + 90;
+  const gap = 20;
+  const rows = Math.ceil(lista.length / cols);
+  const width = pad*2 + cols*cardW + (cols-1)*gap;
+  const headerH = 120;
+  const height = headerH + rows*(cardH+gap) + pad;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#F6F3EC';
+  ctx.fillRect(0, 0, width, height);
+
+  const grad = ctx.createLinearGradient(0, 0, width, 0);
+  grad.addColorStop(0, '#3E7350');
+  grad.addColorStop(1, '#16301F');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, headerH);
+  ctx.fillStyle = '#FFFDF8';
+  ctx.font = '700 30px Lora, serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('🛒 Catálogo de Produtos', pad, 52);
+  ctx.font = '600 15px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,253,248,.82)';
+  ctx.fillText('Atualizado em ' + new Date().toLocaleDateString('pt-BR'), pad, 82);
+
+  const imgs = await Promise.all(lista.map(p => new Promise(resolve => {
+    if(!p.foto){ resolve(null); return; }
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = p.foto;
+  })));
+
+  lista.forEach((p, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const x = pad + col * (cardW + gap);
+    const y = headerH + pad + row * (cardH + gap);
+
+    ctx.fillStyle = '#FFFDF8';
+    roundRectCatalogo(ctx, x, y, cardW, cardH, 16);
+    ctx.fill();
+    ctx.strokeStyle = '#E6DFCD';
+    ctx.lineWidth = 1;
+    roundRectCatalogo(ctx, x, y, cardW, cardH, 16);
+    ctx.stroke();
+
+    const img = imgs[idx];
+    ctx.save();
+    roundRectCatalogo(ctx, x+10, y+10, cardW-20, photoH, 12);
+    ctx.clip();
+    if(img){
+      const scale = Math.max((cardW-20)/img.width, photoH/img.height);
+      const iw = img.width*scale, ih = img.height*scale;
+      ctx.drawImage(img, x+10+((cardW-20)-iw)/2, y+10+(photoH-ih)/2, iw, ih);
+    } else {
+      ctx.fillStyle = '#F0EBDC';
+      ctx.fillRect(x+10, y+10, cardW-20, photoH);
+      ctx.font = '64px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('📦', x+10+(cardW-20)/2, y+10+photoH/2+22);
+      ctx.textAlign = 'left';
+    }
+    ctx.restore();
+
+    ctx.fillStyle = '#21261F';
+    ctx.font = '700 18px Inter, sans-serif';
+    wrapTextCatalogo(ctx, p.nome, x+14, y+photoH+36, cardW-28, 22, 2);
+
+    ctx.fillStyle = '#16301F';
+    ctx.font = '700 21px Lora, serif';
+    ctx.fillText(fmtMoney(p.preco), x+14, y+cardH-14);
+  });
+
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
+}
+function abrirCatalogoModal(){
+  if(!produtos.length){ alert('Cadastre ao menos um produto antes de gerar um catálogo.'); return; }
+  const el = document.getElementById('catalogoListaProdutos');
+  const disponiveis = produtos.filter(p => (p.estoque||0) + (p.estoqueCasa||0) > 0);
+  const semEstoque = produtos.length - disponiveis.length;
+  if(!disponiveis.length){
+    el.innerHTML = '<div class="empty">Nenhum produto com estoque disponível (trabalho ou casa) no momento.</div>';
+  } else {
+    const ordenados = disponiveis.slice().sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+    el.innerHTML = ordenados.map(p => `
+      <label class="pedido-check" style="padding:8px 0; border-bottom:1px solid var(--line);">
+        <input type="checkbox" class="catalogo-chk" data-id="${p.id}" checked>
+        <span>${escapeHtml(p.nome)} <span class="meta">(${fmtMoney(p.preco)})</span></span>
+      </label>
+    `).join('') + (semEstoque > 0 ? `<div class="meta" style="margin-top:10px;">${semEstoque} produto(s) sem estoque foram deixados de fora automaticamente.</div>` : '');
+  }
+  document.getElementById('catalogoModalBg').classList.add('active');
+}
+function fecharCatalogoModal(){
+  document.getElementById('catalogoModalBg').classList.remove('active');
+}
+async function gerarEEnviarCatalogo(){
+  const idsMarcados = Array.from(document.querySelectorAll('.catalogo-chk')).filter(c => c.checked).map(c => c.dataset.id);
+  if(!idsMarcados.length){ alert('Selecione ao menos um produto.'); return; }
+  const lista = produtos.filter(p => idsMarcados.includes(p.id)).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+  document.getElementById('catalogoCarregando').style.display = 'block';
+  try{
+    const blob = await gerarImagemCatalogo(lista);
+    const filename = `catalogo-${todayISO()}.png`;
+    const file = new File([blob], filename, {type:'image/png'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({ files:[file], title:'Catálogo de Produtos', text:'Confira nosso catálogo atualizado!' });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      alert('Catálogo baixado! Agora é só anexar a imagem numa conversa do WhatsApp.');
+    }
+    fecharCatalogoModal();
+  }catch(err){
+    if(err.name !== 'AbortError'){ alert('Não foi possível gerar o catálogo. Tente novamente.'); console.error(err); }
+  } finally {
+    document.getElementById('catalogoCarregando').style.display = 'none';
+  }
+}
+
 async function exportarBackup(){
   const dados = { clientes, produtos, vendas, config, fornecedores, encomendas, exportadoEm: new Date().toISOString() };
   const json = JSON.stringify(dados, null, 2);
