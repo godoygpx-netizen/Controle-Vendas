@@ -1150,7 +1150,7 @@ function enviarPedidoWhatsapp(){
   let msg = `Olá ${fornecedor.nome}! Gostaria de fazer um pedido de reposição:\n\n${itens.join('\n')}`;
   if(totalPedido > 0){ msg += `\n\nTotal estimado: ${fmtMoney(totalPedido)}`; }
   msg += `\n\nObrigado!`;
-  window.open(`https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`, '_blank');
+  window.open(whatsappUrl(digitos, msg), '_blank');
 }
 
 /* ---------- CLIENTES ---------- */
@@ -1867,6 +1867,15 @@ function telefoneCliente(clienteId){
 function valorPendenteVenda(venda){
   return venda.forma === 'Dividido' ? (venda.valorFiado || 0) : venda.total;
 }
+function whatsappUrl(numero, texto){
+  // Força a abertura no WhatsApp normal (com.whatsapp), ignorando o WhatsApp Business,
+  // mesmo que o Business esteja configurado como app padrão no Android.
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if(isAndroid){
+    return `intent://send?phone=${numero}&text=${encodeURIComponent(texto)}#Intent;scheme=whatsapp;package=com.whatsapp;end`;
+  }
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+}
 function linkCobrancaWhatsapp(venda){
   const tel = telefoneCliente(venda.clienteId);
   if(!tel) return null;
@@ -1879,7 +1888,7 @@ function linkCobrancaWhatsapp(venda){
   if(venda.forma === 'Dividido'){ msg += `\nJá pago: ${fmtMoney(venda.valorPago||0)}\nFalta: ${fmtMoney(pendente)}`; }
   if(config.pixKey){ msg += `\n\nChave Pix para pagamento: ${config.pixKey}`; }
   msg += `\n\nObrigado! 😊`;
-  return `https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`;
+  return whatsappUrl(digitos, msg);
 }
 function linkComprovanteWhatsapp(venda){
   const tel = telefoneCliente(venda.clienteId);
@@ -1891,7 +1900,7 @@ function linkComprovanteWhatsapp(venda){
   let msg = `Olá ${nome}! Aqui está o resumo da sua compra do dia ${fmtDate(venda.data)}:\n\n${listaItens}\n\nTotal: ${fmtMoney(venda.total)}\nForma de pagamento: ${venda.forma}`;
   if(venda.forma === 'Dividido'){ msg += ` (pago ${fmtMoney(venda.valorPago||0)}, restante ${fmtMoney(venda.valorFiado||0)})`; }
   msg += `\n\nObrigado pela preferência! 😊`;
-  return `https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`;
+  return whatsappUrl(digitos, msg);
 }
 function popularFiltroMes(){
   const sel = document.getElementById('filtroMes');
