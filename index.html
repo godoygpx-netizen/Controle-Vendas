@@ -1120,7 +1120,7 @@ let encomendaEditOriginal = null;
 function estoqueEfetivoEncomenda(produto, fonte){
   const campo = fonte === 'casa' ? 'estoqueCasa' : 'estoque';
   let base = produto[campo] || 0;
-  if(encomendaEditOriginal && encomendaEditOriginal.fonteEstoque === fonte){
+  if(encomendaEditOriginal && encomendaEditOriginal.estoqueReservado && encomendaEditOriginal.fonteEstoque === fonte){
     const oi = encomendaEditOriginal.itens.find(i => i.produtoId === produto.id);
     if(oi) base += oi.qtd;
   }
@@ -1246,7 +1246,7 @@ function salvarEncomenda(){
     const e = encomendas.find(x => x.id === encomendaEditId);
     if(e){
       // devolve a reserva antiga antes de aplicar a nova (só se já havia reserva de fato)
-      if(e.fonteEstoque){
+      if(e.estoqueReservado){
         const campoAntigo = e.fonteEstoque === 'casa' ? 'estoqueCasa' : 'estoque';
         e.itens.forEach(i => {
           const p = produtos.find(p => p.id === i.produtoId);
@@ -1260,6 +1260,7 @@ function salvarEncomenda(){
       e.pago = jaPago;
       e.formaPagamento = formaPagamento;
       e.fonteEstoque = fonte;
+      e.estoqueReservado = true;
 
       if(jaPago){
         const itensVenda = itensEncomendaParaVenda(encomendaItensTemp);
@@ -1289,7 +1290,8 @@ function salvarEncomenda(){
       status: 'Pendente',
       pago: jaPago,
       formaPagamento,
-      fonteEstoque: fonte
+      fonteEstoque: fonte,
+      estoqueReservado: true
     };
     if(jaPago){
       const itensVenda = itensEncomendaParaVenda(encomendaItensTemp);
@@ -1320,7 +1322,7 @@ function excluirEncomenda(id){
   const enc = encomendas.find(e => e.id === id);
   if(!enc) return;
   const aindaNaoEntregue = enc.status !== 'Entregue';
-  const temReserva = aindaNaoEntregue && !!enc.fonteEstoque;
+  const temReserva = aindaNaoEntregue && !!enc.estoqueReservado;
   let msg = 'Excluir esta encomenda?';
   if(temReserva){
     msg = enc.vendaId
@@ -1412,8 +1414,8 @@ function renderEncomendas(){
     <div class="list-item">
       <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
         <div class="name">${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}</div>
-        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}${e.fonteEstoque ? ` · reservado ${e.fonteEstoque === 'casa' ? '🏠 em casa' : '🏢 no trabalho'}` : ''}</div>
-        ${!e.fonteEstoque ? `<div class="meta" style="color:var(--danger); font-weight:600;">⚠️ Estoque ainda não reservado — toque em Editar e salve para corrigir</div>` : ''}
+        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}${e.estoqueReservado ? ` · reservado ${e.fonteEstoque === 'casa' ? '🏠 em casa' : '🏢 no trabalho'}` : ''}</div>
+        ${!e.estoqueReservado ? `<div class="meta" style="color:var(--danger); font-weight:600;">⚠️ Estoque ainda não reservado — toque em Editar e salve para corrigir</div>` : ''}
         ${e.obs ? `<div class="meta">📌 ${escapeHtml(e.obs)}</div>` : ''}
       </div>
       <div class="actions">
@@ -1446,7 +1448,7 @@ function abrirDetalheEncomenda(id){
   document.getElementById('detalheEncomendaConteudo').innerHTML = `
     <div style="margin-bottom:12px;">
       <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}${pagoBadge}</div>
-      <div class="meta">${fmtDate(e.data)} · reservado ${e.fonteEstoque==='casa' ? '🏠 em casa' : '🏢 no trabalho'}${e.status==='Entregue' ? (' · entregue ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
+      <div class="meta">${fmtDate(e.data)}${e.estoqueReservado ? ` · reservado ${e.fonteEstoque==='casa' ? '🏠 em casa' : '🏢 no trabalho'}` : ' · ⚠️ estoque ainda não reservado'}${e.status==='Entregue' ? (' · entregue ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
     </div>
     <label>Itens</label>
     <div class="chip-list">${itensHtml}</div>
