@@ -368,6 +368,7 @@
   <section class="view" id="view-clientes">
     <div class="section-head">
       <h2>Clientes</h2>
+      <button class="btn btn-gold btn-sm" onclick="abrirBroadcastWhatsapp()">📢 Msg p/ todos</button>
     </div>
     <div class="card">
       <h3 id="clienteFormTitle">Novo cliente</h3>
@@ -693,6 +694,21 @@
       <option>Cortesia</option>
     </select>
     <button class="btn btn-primary" style="margin-top:16px;" onclick="confirmarEntregaEncomenda()">Confirmar entrega</button>
+  </div>
+</div>
+
+<!-- MODAL MENSAGEM PARA TODOS OS CLIENTES -->
+<div class="modal-bg" id="broadcastModalBg">
+  <div class="modal">
+    <div class="sheet-handle"></div>
+    <div class="section-head">
+      <h2>Mensagem para todos</h2>
+      <button class="close-x" onclick="fecharBroadcastWhatsapp()">✕</button>
+    </div>
+    <label>Mensagem</label>
+    <textarea id="broadcastMsg" rows="4" placeholder="Ex: Estoque de Paçocas e Amendoins renovado, faça seu pedido!" oninput="renderBroadcastLista()" style="width:100%; padding:11px; border:1px solid var(--line); border-radius:11px; font-family:inherit; font-size:15px; resize:vertical; background:#fff;"></textarea>
+    <div class="meta" style="margin:10px 0;">Toque em "Enviar" em cada cliente — o WhatsApp abre com a mensagem pronta, você só confirma o envio, um de cada vez.</div>
+    <div id="broadcastClientesList"></div>
   </div>
 </div>
 
@@ -1218,6 +1234,45 @@ function linkWhatsappLivre(cliente){
   let digitos = cliente.telefone.replace(/\D/g, '');
   if(digitos.length <= 11){ digitos = '55' + digitos; }
   return whatsappUrl(digitos, '');
+}
+
+let broadcastEnviados = new Set();
+function abrirBroadcastWhatsapp(){
+  if(!clientes.length){ alert('Cadastre ao menos um cliente antes de enviar uma mensagem em massa.'); return; }
+  document.getElementById('broadcastMsg').value = '';
+  broadcastEnviados = new Set();
+  renderBroadcastLista();
+  document.getElementById('broadcastModalBg').classList.add('active');
+}
+function fecharBroadcastWhatsapp(){
+  document.getElementById('broadcastModalBg').classList.remove('active');
+}
+function marcarBroadcastEnviado(id){
+  broadcastEnviados.add(id);
+  renderBroadcastLista();
+}
+function renderBroadcastLista(){
+  const msg = document.getElementById('broadcastMsg').value.trim();
+  const el = document.getElementById('broadcastClientesList');
+  const comTelefone = clientes.filter(c => c.telefone);
+  const semTelefone = clientes.length - comTelefone.length;
+  if(!comTelefone.length){
+    el.innerHTML = '<div class="empty">Nenhum cliente com telefone cadastrado.</div>';
+    return;
+  }
+  el.innerHTML = comTelefone.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => {
+    let digitos = c.telefone.replace(/\D/g, ''); if(digitos.length <= 11){ digitos = '55' + digitos; }
+    const enviado = broadcastEnviados.has(c.id);
+    const href = msg ? whatsappUrl(digitos, msg) : null;
+    return `
+    <div class="list-item">
+      <div class="info"><div class="name">${escapeHtml(c.nome)}${enviado ? ' <span class="badge pago">Enviado</span>' : ''}</div></div>
+      ${href
+        ? `<a class="icon-btn whats" href="${href}" target="_blank" rel="noopener" onclick="marcarBroadcastEnviado('${c.id}')">Enviar</a>`
+        : `<span class="meta">Digite a mensagem acima</span>`}
+    </div>
+  `;
+  }).join('') + (semTelefone > 0 ? `<div class="meta" style="margin-top:10px;">${semTelefone} cliente(s) sem telefone cadastrado não aparecem aqui.</div>` : '');
 }
 
 /* ---------- PRODUTOS ---------- */

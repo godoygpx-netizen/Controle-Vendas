@@ -1,4 +1,4 @@
-const CACHE = 'controle-vendas-v29';
+const CACHE = 'controle-vendas-v30';
 const ASSETS = [
   './index.html',
   './manifest.json',
