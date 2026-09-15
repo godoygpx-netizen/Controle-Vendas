@@ -226,6 +226,13 @@
   @media (prefers-reduced-motion: reduce){
     .list-item.pendente-destaque{ animation: none; background: rgba(226,87,76,.1); }
   }
+  .list-item.precisa-separar{
+    background:rgba(201,125,50,.08);
+    border-radius:14px; padding:12px 12px; margin:2px -2px;
+    border:1.5px solid rgba(201,125,50,.4);
+    box-shadow:0 0 0 1px rgba(201,125,50,.08) inset;
+  }
+  .list-item.precisa-separar .name{color:var(--gold-light);}
   .badge.estoque-ok{background:rgba(127,203,134,.16); color:#7FCB86;}
   .badge.estoque-baixo{background:rgba(201,125,50,.2); color:var(--gold-light);}
   .badge.estoque-zero{background:rgba(226,87,76,.16); color:#F09088;}
@@ -1448,9 +1455,9 @@ function renderEncomendas(){
 
   const elP = document.getElementById('listaEncomendasPendentes');
   elP.innerHTML = pendentes.length ? pendentes.map(e => `
-    <div class="list-item">
+    <div class="list-item${e.fonteEstoque === 'casa' ? ' precisa-separar' : ''}">
       <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
-        <div class="name">${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}${e.estoqueReservado ? ' <span class="badge estoque-ok">✅ Descontado</span>' : ''}</div>
+        <div class="name">${e.fonteEstoque === 'casa' ? '🎒 ' : ''}${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}${e.estoqueReservado ? ' <span class="badge estoque-ok">✅ Descontado</span>' : ''}</div>
         <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}${e.estoqueReservado ? ` · ${e.fonteEstoque === 'casa' ? '🏠 trazer de casa' : '🏢 já está no trabalho'}` : ''}</div>
         ${!e.estoqueReservado ? `<div class="meta" style="color:var(--danger); font-weight:600;">⚠️ Estoque ainda não reservado — toque em Editar e salve para corrigir</div>` : ''}
         ${e.obs ? `<div class="meta">📌 ${escapeHtml(e.obs)}</div>` : ''}
