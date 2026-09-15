@@ -1175,6 +1175,12 @@ function editarEncomenda(id){
   renderEncomendaItensTemp();
   document.getElementById('encomendaModalBg').classList.add('active');
 }
+function itensEncomendaParaVenda(itensEncomenda){
+  return itensEncomenda.map(i => {
+    const p = produtos.find(p => p.id === i.produtoId);
+    return { produtoId: i.produtoId, nome: i.nome, qtd: i.qtd, unidade: i.unidade || 'un', precoUnit: p ? p.preco : 0, custoUnit: p && p.custo ? p.custo : 0 };
+  });
+}
 function salvarEncomenda(){
   if(!encomendaItensTemp.length){ alert('Adicione ao menos um item à encomenda.'); return; }
   const clienteId = document.getElementById('encomendaCliente').value;
@@ -1190,9 +1196,27 @@ function salvarEncomenda(){
       e.obs = obs;
       e.pago = jaPago;
       e.formaPagamento = formaPagamento;
+
+      if(jaPago){
+        const itensVenda = itensEncomendaParaVenda(encomendaItensTemp);
+        const total = itensVenda.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
+        if(e.vendaId){
+          const v = vendas.find(v => v.id === e.vendaId);
+          if(v){ v.itens = itensVenda; v.total = total; v.forma = formaPagamento; v.clienteId = e.clienteId; v.status = 'Pago'; }
+        } else {
+          const venda = { id: uid(), data: todayISO(), clienteId: e.clienteId, itens: itensVenda, forma: formaPagamento, status: 'Pago', total };
+          vendas.push(venda);
+          e.vendaId = venda.id;
+        }
+        DB.set('cv_vendas', vendas);
+      } else if(e.vendaId){
+        vendas = vendas.filter(v => v.id !== e.vendaId);
+        DB.set('cv_vendas', vendas);
+        e.vendaId = null;
+      }
     }
   } else {
-    encomendas.push({
+    const novaEncomenda = {
       id: uid(),
       clienteId: clienteId || null,
       itens: encomendaItensTemp,
@@ -1201,7 +1225,16 @@ function salvarEncomenda(){
       status: 'Pendente',
       pago: jaPago,
       formaPagamento
-    });
+    };
+    if(jaPago){
+      const itensVenda = itensEncomendaParaVenda(encomendaItensTemp);
+      const total = itensVenda.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
+      const venda = { id: uid(), data: todayISO(), clienteId: novaEncomenda.clienteId, itens: itensVenda, forma: formaPagamento, status: 'Pago', total };
+      vendas.push(venda);
+      DB.set('cv_vendas', vendas);
+      novaEncomenda.vendaId = venda.id;
+    }
+    encomendas.push(novaEncomenda);
   }
   DB.set('cv_encomendas', encomendas);
   encomendaEditId = null;
@@ -1209,7 +1242,17 @@ function salvarEncomenda(){
   renderEncomendas();
 }
 function excluirEncomenda(id){
-  if(!confirm('Excluir esta encomenda?')) return;
+  const enc = encomendas.find(e => e.id === id);
+  if(!enc) return;
+  const temVendaPendenteDeEntrega = enc.vendaId && enc.status !== 'Entregue';
+  const msg = temVendaPendenteDeEntrega
+    ? 'Excluir esta encomenda? O pagamento já registrado como venda também será removido, já que a entrega não aconteceu.'
+    : 'Excluir esta encomenda?';
+  if(!confirm(msg)) return;
+  if(temVendaPendenteDeEntrega){
+    vendas = vendas.filter(v => v.id !== enc.vendaId);
+    DB.set('cv_vendas', vendas);
+  }
   encomendas = encomendas.filter(e => e.id !== id);
   DB.set('cv_encomendas', encomendas);
   renderEncomendas();
@@ -1227,7 +1270,7 @@ function abrirEntregaEncomenda(id){
     document.getElementById('entregaFormaGroup').style.display = 'none';
     const aviso = document.getElementById('entregaJaPagoAviso');
     aviso.style.display = 'block';
-    aviso.textContent = `💰 Este cliente já pagou (${enc.formaPagamento || 'Pix'}) — sem precisar cobrar de novo.`;
+    aviso.textContent = `💰 Este cliente já pagou (${enc.formaPagamento || 'Pix'}) e já está contabilizado nas vendas — falta só dar baixa no estoque.`;
   } else {
     document.getElementById('entregaForma').value = 'Pix';
     document.getElementById('entregaFormaGroup').style.display = 'block';
@@ -1243,7 +1286,6 @@ function confirmarEntregaEncomenda(){
   const enc = encomendas.find(e => e.id === encomendaEntregaId);
   if(!enc) return;
   const fonte = document.getElementById('entregaFonte').value;
-  const forma = document.getElementById('entregaForma').value;
   const campoEstoque = fonte === 'casa' ? 'estoqueCasa' : 'estoque';
 
   const semEstoque = enc.itens.filter(i => {
@@ -1256,22 +1298,25 @@ function confirmarEntregaEncomenda(){
     return;
   }
 
-  const itensVenda = enc.itens.map(i => {
-    const p = produtos.find(p => p.id === i.produtoId);
-    return { produtoId: i.produtoId, nome: i.nome, qtd: i.qtd, precoUnit: p ? p.preco : 0, custoUnit: p && p.custo ? p.custo : 0 };
-  });
-  const total = itensVenda.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
-  const venda = {
-    id: uid(),
-    data: todayISO(),
-    clienteId: enc.clienteId,
-    itens: itensVenda,
-    forma,
-    status: forma === 'Fiado' ? 'Pendente' : 'Pago',
-    total
-  };
-  vendas.push(venda);
-  DB.set('cv_vendas', vendas);
+  if(enc.vendaId){
+    // já foi contabilizado como venda quando a encomenda foi marcada como paga — só falta a baixa de estoque
+  } else {
+    const forma = document.getElementById('entregaForma').value;
+    const itensVenda = itensEncomendaParaVenda(enc.itens);
+    const total = itensVenda.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
+    const venda = {
+      id: uid(),
+      data: todayISO(),
+      clienteId: enc.clienteId,
+      itens: itensVenda,
+      forma,
+      status: forma === 'Fiado' ? 'Pendente' : 'Pago',
+      total
+    };
+    vendas.push(venda);
+    DB.set('cv_vendas', vendas);
+    enc.vendaId = venda.id;
+  }
 
   enc.itens.forEach(i => {
     const p = produtos.find(p => p.id === i.produtoId);
@@ -1280,7 +1325,6 @@ function confirmarEntregaEncomenda(){
   DB.set('cv_produtos', produtos);
 
   enc.status = 'Entregue';
-  enc.vendaId = venda.id;
   enc.entregueDe = fonte;
   DB.set('cv_encomendas', encomendas);
 
