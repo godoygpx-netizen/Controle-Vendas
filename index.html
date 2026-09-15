@@ -498,7 +498,10 @@
 
   <!-- REPOSIÇÃO -->
   <section class="view" id="view-reposicao">
-    <div class="section-head"><h2>Reposição</h2></div>
+    <div class="section-head">
+      <h2>Reposição</h2>
+      <button class="btn btn-gold btn-sm" onclick="abrirSolicitarProdutos()">📝 Solicitar produtos</button>
+    </div>
     <div class="card">
       <h3 style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="toggleCollapse('fornecedorFormBody','fornecedorFormChevron')"><span id="fornecedorFormTitle">Novo fornecedor</span> <span id="fornecedorFormChevron" style="font-size:13px; color:var(--ink-soft);">▸</span></h3>
       <div id="fornecedorFormBody" style="display:none;">
@@ -516,15 +519,6 @@
     <div class="card">
       <h3>Fornecedores cadastrados</h3>
       <div id="listaFornecedores"></div>
-    </div>
-    <div class="card">
-      <h3>Fazer pedido</h3>
-      <label>Fornecedor</label>
-      <select id="pedidoFornecedor"></select>
-      <label>Produtos para repor</label>
-      <div id="listaPedidoProdutos"></div>
-      <div class="total-line"><span>Total estimado do pedido</span><span id="pedidoTotalCusto">R$ 0,00</span></div>
-      <button class="btn btn-gold" style="margin-top:14px;" onclick="enviarPedidoWhatsapp()">📲 Enviar pedido via WhatsApp</button>
     </div>
   </section>
 
@@ -550,6 +544,10 @@
     <div class="section-head"><h2>Resumo</h2></div>
     <div class="stat-grid" id="resumoStats"></div>
     <div class="card" style="margin-top:12px;">
+      <h3>Vendas por mês</h3>
+      <div id="resumoGrafico"></div>
+    </div>
+    <div class="card">
       <h3>Por forma de pagamento (mês atual)</h3>
       <div id="resumoFormas"></div>
     </div>
@@ -785,6 +783,36 @@
     <textarea id="broadcastMsg" rows="4" placeholder="Ex: Estoque de Paçocas e Amendoins renovado, faça seu pedido!" oninput="renderBroadcastLista()" style="width:100%; padding:11px; border:1px solid var(--line); border-radius:11px; font-family:inherit; font-size:15px; resize:vertical; background:rgba(255,255,255,.05); color:var(--ink);"></textarea>
     <div class="meta" style="margin:10px 0;">Toque em "Enviar" em cada cliente — o WhatsApp abre com a mensagem pronta, você só confirma o envio, um de cada vez.</div>
     <div id="broadcastClientesList"></div>
+  </div>
+</div>
+
+<!-- MODAL HISTÓRICO DO CLIENTE -->
+<div class="modal-bg" id="historicoClienteModalBg">
+  <div class="modal">
+    <div class="sheet-handle"></div>
+    <div class="section-head">
+      <h2>Histórico do cliente</h2>
+      <button class="close-x" onclick="fecharHistoricoCliente()">✕</button>
+    </div>
+    <div id="historicoClienteResumo" class="stat-grid" style="margin-bottom:14px;"></div>
+    <div id="historicoClienteLista"></div>
+  </div>
+</div>
+
+<!-- MODAL SOLICITAR PRODUTOS (REPOSIÇÃO) -->
+<div class="modal-bg" id="solicitarProdutosModalBg">
+  <div class="modal">
+    <div class="sheet-handle"></div>
+    <div class="section-head">
+      <h2>Solicitar produtos</h2>
+      <button class="close-x" onclick="fecharSolicitarProdutos()">✕</button>
+    </div>
+    <label>Fornecedor</label>
+    <select id="pedidoFornecedor"></select>
+    <label>Produtos para repor</label>
+    <div id="listaPedidoProdutos"></div>
+    <div class="total-line"><span>Total estimado do pedido</span><span id="pedidoTotalCusto">R$ 0,00</span></div>
+    <button class="btn btn-gold" style="margin-top:14px;" onclick="enviarPedidoWhatsapp()">📲 Enviar pedido via WhatsApp</button>
   </div>
 </div>
 
@@ -1601,6 +1629,15 @@ function renderFornecedores(){
     </div>
   `).join('');
 }
+function abrirSolicitarProdutos(){
+  if(!fornecedores.length){ alert('Cadastre ao menos um fornecedor antes de solicitar produtos.'); return; }
+  renderPedidoFornecedorSelect();
+  renderPedidoProdutos();
+  document.getElementById('solicitarProdutosModalBg').classList.add('active');
+}
+function fecharSolicitarProdutos(){
+  document.getElementById('solicitarProdutosModalBg').classList.remove('active');
+}
 function renderPedidoFornecedorSelect(){
   const sel = document.getElementById('pedidoFornecedor');
   if(!fornecedores.length){
@@ -1742,18 +1779,64 @@ function renderClientes(){
   const el = document.getElementById('listaClientes');
   if(!clientes.length){ el.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>'; return; }
   el.innerHTML = clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `
-    <div class="list-item">
-      <div class="info">
-        <div class="name">${escapeHtml(c.nome)}</div>
-        <div class="meta">${escapeHtml(c.telefone || c.endereco || 'Sem dados de contato')}</div>
+    <div class="list-item" style="display:block;">
+      <div class="venda-resumo" onclick="toggleClienteAcoes('${c.id}')">
+        <div class="info">
+          <div class="name">${escapeHtml(c.nome)}</div>
+          <div class="meta">${escapeHtml(c.telefone || c.endereco || 'Sem dados de contato')}</div>
+        </div>
       </div>
-      <div class="actions">
-        ${linkWhatsappLivre(c) ? `<a class="icon-btn whats" href="${linkWhatsappLivre(c)}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ''}
-        <button class="icon-btn" onclick="editarCliente('${c.id}')">Editar</button>
-        <button class="icon-btn del" onclick="excluirCliente('${c.id}')">Excluir</button>
+      <div class="cliente-acoes-wrap" id="clienteAcoes-${c.id}" style="display:none; margin-top:8px;">
+        <div class="actions">
+          <button class="icon-btn gold" onclick="abrirHistoricoCliente('${c.id}')">📜 Histórico</button>
+          ${linkWhatsappLivre(c) ? `<a class="icon-btn whats" href="${linkWhatsappLivre(c)}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ''}
+          <button class="icon-btn" onclick="editarCliente('${c.id}')">Editar</button>
+          <button class="icon-btn del" onclick="excluirCliente('${c.id}')">Excluir</button>
+        </div>
       </div>
     </div>
   `).join('');
+}
+function toggleClienteAcoes(id){
+  const el = document.getElementById('clienteAcoes-' + id);
+  if(!el) return;
+  const abrir = el.style.display === 'none';
+  document.querySelectorAll('.cliente-acoes-wrap').forEach(w => { if(w !== el) w.style.display = 'none'; });
+  el.style.display = abrir ? 'block' : 'none';
+}
+function abrirHistoricoCliente(id){
+  const c = clientes.find(x => x.id === id);
+  if(!c) return;
+  const vendasCliente = vendas.filter(v => v.clienteId === id).sort((a,b) => b.data.localeCompare(a.data) || b.id.localeCompare(a.id));
+
+  const totalGasto = vendasCliente.filter(v => v.forma !== 'Cortesia').reduce((s,v) => s + v.total, 0);
+  const totalPendente = vendasCliente.filter(v => v.status === 'Pendente').reduce((s,v) => s + valorPendenteVenda(v), 0);
+
+  document.getElementById('historicoClienteResumo').innerHTML = `
+    <div class="stat"><div class="num">${fmtMoney(totalGasto)}</div><div class="lbl">Total gasto</div></div>
+    <div class="stat gold"><div class="num">${vendasCliente.length}</div><div class="lbl">Compras</div></div>
+    ${totalPendente > 0 ? `<div class="stat" style="grid-column:1/-1; background:var(--danger);"><div class="num">${fmtMoney(totalPendente)}</div><div class="lbl">Pendente</div></div>` : ''}
+  `;
+
+  const lista = document.getElementById('historicoClienteLista');
+  if(!vendasCliente.length){
+    lista.innerHTML = '<div class="empty">Esse cliente ainda não fez nenhuma compra.</div>';
+  } else {
+    lista.innerHTML = vendasCliente.map(v => `
+      <div class="list-item">
+        <div class="info">
+          <div class="name">${fmtDate(v.data)} <span class="badge ${v.status==='Pago'?'pago':'pendente'}">${v.status}</span>${v.forma==='Cortesia' ? ' <span class="badge estoque-baixo">Cortesia</span>' : ''}</div>
+          <div class="meta">${v.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}</div>
+          <div class="meta">${v.forma} · ${fmtMoney(v.total)}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('historicoClienteModalBg').classList.add('active');
+}
+function fecharHistoricoCliente(){
+  document.getElementById('historicoClienteModalBg').classList.remove('active');
 }
 function linkWhatsappLivre(cliente){
   if(!cliente.telefone) return null;
@@ -2566,6 +2649,49 @@ function toggleVendaDetalhe(id){
 }
 
 /* ---------- RESUMO ---------- */
+function renderGraficoVendasPorMes(){
+  const el = document.getElementById('resumoGrafico');
+  const hoje = new Date();
+  const meses = [];
+  for(let i = 5; i >= 0; i--){
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    meses.push(d.toISOString().slice(0,7));
+  }
+  const nomesMes = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const totais = meses.map(m => vendas.filter(v => v.data.slice(0,7) === m && v.forma !== 'Cortesia').reduce((s,v)=>s+v.total,0));
+
+  if(totais.every(t => t === 0)){
+    el.innerHTML = '<div class="empty">Sem vendas suficientes para mostrar o gráfico ainda.</div>';
+    return;
+  }
+
+  const max = Math.max(...totais, 1);
+  const largura = 320, altura = 140, padBase = 22, padTopo = 10;
+  const larguraBarra = (largura / meses.length) * 0.55;
+  const espaco = largura / meses.length;
+
+  let barras = '';
+  meses.forEach((m, idx) => {
+    const valor = totais[idx];
+    const alturaBarra = valor > 0 ? Math.max((valor / max) * (altura - padBase - padTopo), 3) : 0;
+    const x = idx * espaco + (espaco - larguraBarra) / 2;
+    const y = altura - padBase - alturaBarra;
+    const [ano, mesNum] = m.split('-');
+    const label = nomesMes[parseInt(mesNum) - 1];
+    const ehMesAtual = m === todayISO().slice(0,7);
+    barras += `
+      <rect x="${x}" y="${y}" width="${larguraBarra}" height="${alturaBarra}" rx="3" fill="${ehMesAtual ? 'var(--green,#E8A33D)' : 'var(--gold,#5B8AA6)'}" opacity="${ehMesAtual ? '1' : '0.55'}"></rect>
+      <text x="${x + larguraBarra/2}" y="${altura - 6}" text-anchor="middle" font-size="9" fill="var(--ink-soft,#9AA0A6)" font-family="IBM Plex Mono, monospace">${label}</text>
+    `;
+  });
+
+  el.innerHTML = `
+    <svg viewBox="0 0 ${largura} ${altura}" style="width:100%; height:auto; display:block;">
+      ${barras}
+    </svg>
+    <div class="meta" style="text-align:center; margin-top:6px;">Últimos 6 meses (sem cortesias) · maior mês: ${fmtMoney(max)}</div>
+  `;
+}
 function renderResumo(){
   document.getElementById('configPixKey').value = config.pixKey || '';
   const mesAtual = todayISO().slice(0,7);
@@ -2582,6 +2708,8 @@ function renderResumo(){
     <div class="stat gold"><div class="num">${doMesTudo.length}</div><div class="lbl">Vendas este mês${degustacoes ? ` (${degustacoes} cortesia)` : ''}</div></div>
     <div class="stat" style="grid-column:1/-1;"><div class="num">${fmtMoney(lucroMes)}</div><div class="lbl">Lucro estimado este mês (não inclui cortesias)</div></div>
   `;
+
+  renderGraficoVendasPorMes();
 
   const formas = {};
   doMes.forEach(v => { formas[v.forma] = (formas[v.forma]||0) + v.total; });
