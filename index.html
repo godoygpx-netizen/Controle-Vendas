@@ -655,7 +655,7 @@
   <div class="modal">
     <div class="sheet-handle"></div>
     <div class="section-head">
-      <h2>Nova encomenda</h2>
+      <h2 id="encomendaModalTitle">Nova encomenda</h2>
       <button class="close-x" onclick="closeEncomendaModal()">✕</button>
     </div>
     <label>Cliente</label>
@@ -685,7 +685,7 @@
       </select>
     </div>
 
-    <button class="btn btn-primary" style="margin-top:16px;" onclick="salvarEncomenda()">Salvar encomenda</button>
+    <button class="btn btn-primary" id="encomendaSalvarBtn" style="margin-top:16px;" onclick="salvarEncomenda()">Salvar encomenda</button>
   </div>
 </div>
 
@@ -1086,9 +1086,13 @@ function switchView(name){
 /* ---------- ENCOMENDAS ---------- */
 let encomendas = DB.get('cv_encomendas');
 let encomendaItensTemp = [];
+let encomendaEditId = null;
 function openEncomendaModal(){
   if(!produtos.length){ alert('Cadastre ao menos um produto antes de criar uma encomenda.'); switchView('produtos'); return; }
+  encomendaEditId = null;
   encomendaItensTemp = [];
+  document.getElementById('encomendaModalTitle').textContent = 'Nova encomenda';
+  document.getElementById('encomendaSalvarBtn').textContent = 'Salvar encomenda';
   const cSel = document.getElementById('encomendaCliente');
   cSel.innerHTML = '<option value="">Consumidor não identificado</option>' +
     clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
@@ -1133,22 +1137,59 @@ function renderEncomendaItensTemp(){
     </div>
   `).join('') || '<div class="meta" style="color:var(--ink-soft); font-size:12.5px;">Nenhum item adicionado.</div>';
 }
+function editarEncomenda(id){
+  const e = encomendas.find(x => x.id === id);
+  if(!e) return;
+  if(e.status !== 'Pendente'){ alert('Só é possível editar encomendas que ainda estão pendentes.'); return; }
+  if(!produtos.length){ alert('Cadastre ao menos um produto antes de editar uma encomenda.'); switchView('produtos'); return; }
+  encomendaEditId = e.id;
+  encomendaItensTemp = e.itens.map(i => ({...i}));
+  document.getElementById('encomendaModalTitle').textContent = 'Editar encomenda';
+  document.getElementById('encomendaSalvarBtn').textContent = 'Salvar alterações';
+  const cSel = document.getElementById('encomendaCliente');
+  cSel.innerHTML = '<option value="">Consumidor não identificado</option>' +
+    clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
+  cSel.value = e.clienteId || '';
+  const pSel = document.getElementById('encomendaProdutoSelect');
+  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('');
+  document.getElementById('encomendaItemQtd').value = 1;
+  document.getElementById('encomendaObs').value = e.obs || '';
+  document.getElementById('encomendaJaPago').checked = !!e.pago;
+  document.getElementById('encomendaFormaPagamento').value = e.formaPagamento || 'Pix';
+  toggleEncomendaFormaPagamento();
+  renderEncomendaItensTemp();
+  document.getElementById('encomendaModalBg').classList.add('active');
+}
 function salvarEncomenda(){
   if(!encomendaItensTemp.length){ alert('Adicione ao menos um item à encomenda.'); return; }
   const clienteId = document.getElementById('encomendaCliente').value;
   const jaPago = document.getElementById('encomendaJaPago').checked;
-  const encomenda = {
-    id: uid(),
-    clienteId: clienteId || null,
-    itens: encomendaItensTemp,
-    obs: document.getElementById('encomendaObs').value.trim(),
-    data: todayISO(),
-    status: 'Pendente',
-    pago: jaPago,
-    formaPagamento: jaPago ? document.getElementById('encomendaFormaPagamento').value : null
-  };
-  encomendas.push(encomenda);
+  const obs = document.getElementById('encomendaObs').value.trim();
+  const formaPagamento = jaPago ? document.getElementById('encomendaFormaPagamento').value : null;
+
+  if(encomendaEditId){
+    const e = encomendas.find(x => x.id === encomendaEditId);
+    if(e){
+      e.clienteId = clienteId || null;
+      e.itens = encomendaItensTemp;
+      e.obs = obs;
+      e.pago = jaPago;
+      e.formaPagamento = formaPagamento;
+    }
+  } else {
+    encomendas.push({
+      id: uid(),
+      clienteId: clienteId || null,
+      itens: encomendaItensTemp,
+      obs,
+      data: todayISO(),
+      status: 'Pendente',
+      pago: jaPago,
+      formaPagamento
+    });
+  }
   DB.set('cv_encomendas', encomendas);
+  encomendaEditId = null;
   closeEncomendaModal();
   renderEncomendas();
 }
@@ -1245,6 +1286,7 @@ function renderEncomendas(){
       </div>
       <div class="actions">
         <button class="icon-btn" onclick="abrirEntregaEncomenda('${e.id}')">🚚 Entregar</button>
+        <button class="icon-btn" onclick="editarEncomenda('${e.id}')">Editar</button>
         <button class="icon-btn del" onclick="excluirEncomenda('${e.id}')">Excluir</button>
       </div>
     </div>
@@ -1279,6 +1321,7 @@ function abrirDetalheEncomenda(id){
     ${e.obs ? `<label>Observação</label><div class="meta" style="white-space:normal;">📌 ${escapeHtml(e.obs)}</div>` : ''}
     <div class="row" style="margin-top:18px;">
       ${e.status === 'Pendente' ? `<button class="btn btn-primary" onclick="fecharDetalheEncomenda(); abrirEntregaEncomenda('${e.id}')">🚚 Entregar</button>` : ''}
+      ${e.status === 'Pendente' ? `<button class="btn btn-ghost" onclick="fecharDetalheEncomenda(); editarEncomenda('${e.id}')">Editar</button>` : ''}
       <button class="btn btn-danger" onclick="fecharDetalheEncomenda(); excluirEncomenda('${e.id}')">Excluir</button>
     </div>
   `;
