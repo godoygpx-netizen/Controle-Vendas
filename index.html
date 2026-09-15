@@ -303,6 +303,21 @@
   select.forma-select option{color:var(--ink);}
   .filter-row{display:flex; gap:8px; margin-bottom:12px;}
   .filter-row select{font-size:13px; padding:9px;}
+
+  .pedido-item{
+    display:flex; flex-direction:column; gap:8px;
+    padding:10px 0; border-bottom:1px solid var(--line);
+  }
+  .pedido-item:last-child{border-bottom:none;}
+  .pedido-item-top{display:flex; align-items:center; gap:8px;}
+  .pedido-check{display:flex; align-items:center; gap:8px; font-size:14px; flex:1; min-width:0;}
+  .pedido-check input[type=checkbox]{width:18px; height:18px; flex-shrink:0; accent-color:var(--green);}
+  .pedido-check span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .pedido-item-campos{display:flex; gap:8px; padding-left:26px;}
+  .pedido-item-campos .campo{flex:1;}
+  .pedido-item-campos label{font-size:11px; margin:0 0 3px;}
+  .pedido-qtd, .pedido-custo{width:100%; flex-shrink:0; text-align:center; padding:8px 6px;}
+  .pedido-subtotal{font-size:12px; color:var(--ink-soft); padding-left:26px;}
 </style>
 </head>
 <body>
@@ -404,6 +419,36 @@
     </div>
   </section>
 
+  <!-- REPOSIÇÃO -->
+  <section class="view" id="view-reposicao">
+    <div class="section-head"><h2>Reposição</h2></div>
+    <div class="card">
+      <h3 id="fornecedorFormTitle">Novo fornecedor</h3>
+      <input type="hidden" id="fornecedorId">
+      <label>Nome *</label>
+      <input id="fornecedorNome" placeholder="Nome do fornecedor">
+      <label>WhatsApp</label>
+      <input id="fornecedorWhatsapp" placeholder="(00) 00000-0000">
+      <div class="row" style="margin-top:14px;">
+        <button class="btn btn-primary" onclick="salvarFornecedor()">Salvar</button>
+        <button class="btn btn-ghost" onclick="limparFormFornecedor()">Limpar</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Fornecedores cadastrados</h3>
+      <div id="listaFornecedores"></div>
+    </div>
+    <div class="card">
+      <h3>Fazer pedido</h3>
+      <label>Fornecedor</label>
+      <select id="pedidoFornecedor"></select>
+      <label>Produtos para repor</label>
+      <div id="listaPedidoProdutos"></div>
+      <div class="total-line"><span>Total estimado do pedido</span><span id="pedidoTotalCusto">R$ 0,00</span></div>
+      <button class="btn btn-gold" style="margin-top:14px;" onclick="enviarPedidoWhatsapp()">📲 Enviar pedido via WhatsApp</button>
+    </div>
+  </section>
+
   <!-- RESUMO -->
   <section class="view" id="view-resumo">
     <div class="section-head"><h2>Resumo</h2></div>
@@ -447,6 +492,7 @@
   <button class="active" data-view="vendas" onclick="switchView('vendas')"><span class="ic">🧾</span>Vendas</button>
   <button data-view="clientes" onclick="switchView('clientes')"><span class="ic">👤</span>Clientes</button>
   <button data-view="produtos" onclick="switchView('produtos')"><span class="ic">📦</span>Produtos</button>
+  <button data-view="reposicao" onclick="switchView('reposicao')"><span class="ic">🚚</span>Repor</button>
   <button data-view="resumo" onclick="switchView('resumo')"><span class="ic">📊</span>Resumo</button>
 </nav>
 
@@ -563,7 +609,7 @@ try{ firestore.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e
 
 let currentUser = null;
 let cloudSyncPronto = false;
-const CLOUD_KEYS = ['cv_clientes','cv_produtos','cv_vendas','cv_config'];
+const CLOUD_KEYS = ['cv_clientes','cv_produtos','cv_vendas','cv_config','cv_fornecedores'];
 
 function syncToCloud(key, value){
   if(!currentUser || !cloudSyncPronto) return;
@@ -605,7 +651,7 @@ function salvarConfig(){
   localStorage.setItem('cv_config', JSON.stringify(config));
 }
 async function exportarBackup(){
-  const dados = { clientes, produtos, vendas, config, exportadoEm: new Date().toISOString() };
+  const dados = { clientes, produtos, vendas, config, fornecedores, exportadoEm: new Date().toISOString() };
   const json = JSON.stringify(dados, null, 2);
   const filename = `backup-controle-vendas-${todayISO()}.json`;
   const file = new File([json], filename, {type:'application/json'});
@@ -645,14 +691,16 @@ function importarBackup(ev){
       alert('Arquivo inválido. Selecione um backup exportado por este app.');
       return;
     }
-    if(!confirm('Importar este backup vai SUBSTITUIR todos os dados atuais (clientes, produtos e vendas). Deseja continuar?')) return;
+    if(!confirm('Importar este backup vai SUBSTITUIR todos os dados atuais (clientes, produtos, vendas e fornecedores). Deseja continuar?')) return;
     clientes = dados.clientes;
     produtos = dados.produtos;
     vendas = dados.vendas;
     config = dados.config || {};
+    fornecedores = Array.isArray(dados.fornecedores) ? dados.fornecedores : [];
     DB.set('cv_clientes', clientes);
     DB.set('cv_produtos', produtos);
     DB.set('cv_vendas', vendas);
+    DB.set('cv_fornecedores', fornecedores);
     localStorage.setItem('cv_config', JSON.stringify(config));
     renderClientes(); renderProdutos(); renderVendas(); renderResumo();
     alert('Backup importado com sucesso!');
@@ -668,8 +716,153 @@ function switchView(name){
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   if(name === 'clientes') renderClientes();
   if(name === 'produtos') renderProdutos();
+  if(name === 'reposicao'){ renderFornecedores(); renderPedidoFornecedorSelect(); renderPedidoProdutos(); }
   if(name === 'resumo') renderResumo();
   if(name === 'vendas') renderVendas();
+}
+
+/* ---------- FORNECEDORES / REPOSIÇÃO ---------- */
+let fornecedores = DB.get('cv_fornecedores');
+function salvarFornecedor(){
+  const nome = document.getElementById('fornecedorNome').value.trim();
+  if(!nome){ alert('Informe o nome do fornecedor.'); return; }
+  const id = document.getElementById('fornecedorId').value;
+  const data = { id: id || uid(), nome, whatsapp: document.getElementById('fornecedorWhatsapp').value.trim() };
+  if(id){ fornecedores = fornecedores.map(f => f.id === id ? data : f); }
+  else { fornecedores.push(data); }
+  DB.set('cv_fornecedores', fornecedores);
+  limparFormFornecedor();
+  renderFornecedores();
+  renderPedidoFornecedorSelect();
+}
+function editarFornecedor(id){
+  const f = fornecedores.find(x => x.id === id);
+  if(!f) return;
+  document.getElementById('fornecedorId').value = f.id;
+  document.getElementById('fornecedorNome').value = f.nome;
+  document.getElementById('fornecedorWhatsapp').value = f.whatsapp || '';
+  document.getElementById('fornecedorFormTitle').textContent = 'Editar fornecedor';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function excluirFornecedor(id){
+  if(!confirm('Excluir este fornecedor?')) return;
+  fornecedores = fornecedores.filter(f => f.id !== id);
+  DB.set('cv_fornecedores', fornecedores);
+  renderFornecedores();
+  renderPedidoFornecedorSelect();
+}
+function limparFormFornecedor(){
+  document.getElementById('fornecedorId').value = '';
+  document.getElementById('fornecedorNome').value = '';
+  document.getElementById('fornecedorWhatsapp').value = '';
+  document.getElementById('fornecedorFormTitle').textContent = 'Novo fornecedor';
+}
+function renderFornecedores(){
+  const el = document.getElementById('listaFornecedores');
+  if(!fornecedores.length){ el.innerHTML = '<div class="empty">Nenhum fornecedor cadastrado ainda.</div>'; return; }
+  el.innerHTML = fornecedores.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(f => `
+    <div class="list-item">
+      <div class="info">
+        <div class="name">${escapeHtml(f.nome)}</div>
+        <div class="meta">${escapeHtml(f.whatsapp || 'Sem WhatsApp cadastrado')}</div>
+      </div>
+      <div class="actions">
+        <button class="icon-btn" onclick="editarFornecedor('${f.id}')">Editar</button>
+        <button class="icon-btn del" onclick="excluirFornecedor('${f.id}')">Excluir</button>
+      </div>
+    </div>
+  `).join('');
+}
+function renderPedidoFornecedorSelect(){
+  const sel = document.getElementById('pedidoFornecedor');
+  if(!fornecedores.length){
+    sel.innerHTML = '<option value="">Cadastre um fornecedor acima</option>';
+    return;
+  }
+  const atual = sel.value;
+  sel.innerHTML = fornecedores.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(f => `<option value="${f.id}">${escapeHtml(f.nome)}</option>`).join('');
+  if(atual && fornecedores.some(f=>f.id===atual)) sel.value = atual;
+}
+function renderPedidoProdutos(){
+  const el = document.getElementById('listaPedidoProdutos');
+  if(!produtos.length){ el.innerHTML = '<div class="empty">Nenhum produto cadastrado.</div>'; return; }
+  const ordenados = produtos.slice().sort((a,b) => (a.ordem||0) - (b.ordem||0));
+  el.innerHTML = ordenados.map(p => {
+    const marcado = p.estoque <= 3;
+    const sugestao = marcado ? Math.max(10 - p.estoque, 5) : '';
+    return `
+    <div class="pedido-item">
+      <div class="pedido-item-top">
+        <label class="pedido-check">
+          <input type="checkbox" class="pedido-chk" data-id="${p.id}" ${marcado ? 'checked' : ''} onchange="atualizarTotalPedido()">
+          <span>${escapeHtml(p.nome)} <span class="meta">(estoque: ${p.estoque})</span></span>
+        </label>
+      </div>
+      <div class="pedido-item-campos">
+        <div class="campo">
+          <label>Quantidade</label>
+          <input type="number" min="1" step="1" class="pedido-qtd" data-id="${p.id}" placeholder="Qtd" value="${sugestao}" oninput="atualizarTotalPedido()">
+        </div>
+        <div class="campo">
+          <label>Custo unitário (R$)</label>
+          <input type="number" min="0" step="0.01" class="pedido-custo" data-id="${p.id}" placeholder="0,00" value="${p.custo || ''}" oninput="atualizarTotalPedido()">
+        </div>
+      </div>
+      <div class="pedido-subtotal" id="pedidoSubtotal-${p.id}"></div>
+    </div>
+  `;
+  }).join('');
+  atualizarTotalPedido();
+}
+function atualizarTotalPedido(){
+  let totalGeral = 0;
+  document.querySelectorAll('.pedido-chk').forEach(chk => {
+    const id = chk.dataset.id;
+    const subtotalEl = document.getElementById(`pedidoSubtotal-${id}`);
+    const qtdInput = document.querySelector(`.pedido-qtd[data-id="${id}"]`);
+    const custoInput = document.querySelector(`.pedido-custo[data-id="${id}"]`);
+    const qtd = parseFloat(qtdInput.value) || 0;
+    const custo = parseFloat(custoInput.value) || 0;
+    const subtotal = qtd * custo;
+    if(chk.checked && qtd > 0){
+      totalGeral += subtotal;
+      subtotalEl.textContent = subtotal > 0 ? `Subtotal: ${fmtMoney(subtotal)}` : '';
+    } else {
+      subtotalEl.textContent = '';
+    }
+  });
+  document.getElementById('pedidoTotalCusto').textContent = fmtMoney(totalGeral);
+}
+function enviarPedidoWhatsapp(){
+  const fornecedorId = document.getElementById('pedidoFornecedor').value;
+  const fornecedor = fornecedores.find(f => f.id === fornecedorId);
+  if(!fornecedor){ alert('Selecione um fornecedor cadastrado.'); return; }
+  if(!fornecedor.whatsapp){ alert('Esse fornecedor não tem WhatsApp cadastrado. Edite o fornecedor e adicione o número.'); return; }
+  const itens = [];
+  let totalPedido = 0;
+  document.querySelectorAll('.pedido-chk').forEach(chk => {
+    if(chk.checked){
+      const id = chk.dataset.id;
+      const qtdInput = document.querySelector(`.pedido-qtd[data-id="${id}"]`);
+      const custoInput = document.querySelector(`.pedido-custo[data-id="${id}"]`);
+      const qtd = parseInt(qtdInput.value) || 0;
+      const custo = parseFloat(custoInput.value) || 0;
+      if(qtd > 0){
+        const produto = produtos.find(p => p.id === id);
+        if(produto){
+          itens.push(`- ${qtd}x ${produto.nome}`);
+          totalPedido += qtd * custo;
+        }
+      }
+    }
+  });
+  if(!itens.length){ alert('Marque ao menos um produto e informe a quantidade a pedir.'); return; }
+  let digitos = fornecedor.whatsapp.replace(/\D/g, '');
+  if(digitos.length <= 11){ digitos = '55' + digitos; }
+  let msg = `Olá ${fornecedor.nome}! Gostaria de fazer um pedido de reposição:\n\n${itens.join('\n')}`;
+  if(totalPedido > 0){ msg += `\n\nTotal estimado: ${fmtMoney(totalPedido)}`; }
+  msg += `\n\nObrigado!`;
+  window.open(`https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 /* ---------- CLIENTES ---------- */
@@ -1507,6 +1700,7 @@ async function baixarDadosDaNuvem(userId){
   clientes = DB.get('cv_clientes');
   produtos = DB.get('cv_produtos');
   vendas = DB.get('cv_vendas');
+  fornecedores = DB.get('cv_fornecedores');
   config = (() => { try{ return JSON.parse(localStorage.getItem('cv_config')) || {}; }catch(e){ return {}; } })();
   migrarOrdemProdutos();
   renderClientes(); renderProdutos(); renderVendas(); renderResumo();
