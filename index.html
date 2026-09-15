@@ -1245,12 +1245,14 @@ function salvarEncomenda(){
   if(encomendaEditId){
     const e = encomendas.find(x => x.id === encomendaEditId);
     if(e){
-      // devolve a reserva antiga antes de aplicar a nova
-      const campoAntigo = e.fonteEstoque === 'casa' ? 'estoqueCasa' : 'estoque';
-      e.itens.forEach(i => {
-        const p = produtos.find(p => p.id === i.produtoId);
-        if(p){ p[campoAntigo] = (p[campoAntigo] || 0) + i.qtd; }
-      });
+      // devolve a reserva antiga antes de aplicar a nova (só se já havia reserva de fato)
+      if(e.fonteEstoque){
+        const campoAntigo = e.fonteEstoque === 'casa' ? 'estoqueCasa' : 'estoque';
+        e.itens.forEach(i => {
+          const p = produtos.find(p => p.id === i.produtoId);
+          if(p){ p[campoAntigo] = (p[campoAntigo] || 0) + i.qtd; }
+        });
+      }
 
       e.clienteId = clienteId || null;
       e.itens = encomendaItensTemp;
@@ -1318,24 +1320,27 @@ function excluirEncomenda(id){
   const enc = encomendas.find(e => e.id === id);
   if(!enc) return;
   const aindaNaoEntregue = enc.status !== 'Entregue';
+  const temReserva = aindaNaoEntregue && !!enc.fonteEstoque;
   let msg = 'Excluir esta encomenda?';
-  if(aindaNaoEntregue){
+  if(temReserva){
     msg = enc.vendaId
       ? 'Excluir esta encomenda? O estoque reservado será devolvido e o pagamento já registrado como venda também será removido, já que a entrega não aconteceu.'
       : 'Excluir esta encomenda? O estoque reservado será devolvido.';
+  } else if(aindaNaoEntregue && enc.vendaId){
+    msg = 'Excluir esta encomenda? O pagamento já registrado como venda também será removido, já que a entrega não aconteceu.';
   }
   if(!confirm(msg)) return;
-  if(aindaNaoEntregue){
+  if(temReserva){
     const campo = enc.fonteEstoque === 'casa' ? 'estoqueCasa' : 'estoque';
     enc.itens.forEach(i => {
       const p = produtos.find(p => p.id === i.produtoId);
       if(p){ p[campo] = (p[campo] || 0) + i.qtd; }
     });
     DB.set('cv_produtos', produtos);
-    if(enc.vendaId){
-      vendas = vendas.filter(v => v.id !== enc.vendaId);
-      DB.set('cv_vendas', vendas);
-    }
+  }
+  if(aindaNaoEntregue && enc.vendaId){
+    vendas = vendas.filter(v => v.id !== enc.vendaId);
+    DB.set('cv_vendas', vendas);
   }
   encomendas = encomendas.filter(e => e.id !== id);
   DB.set('cv_encomendas', encomendas);
@@ -1407,7 +1412,8 @@ function renderEncomendas(){
     <div class="list-item">
       <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
         <div class="name">${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}</div>
-        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')} · reservado ${e.fonteEstoque === 'casa' ? '🏠 em casa' : '🏢 no trabalho'}</div>
+        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}${e.fonteEstoque ? ` · reservado ${e.fonteEstoque === 'casa' ? '🏠 em casa' : '🏢 no trabalho'}` : ''}</div>
+        ${!e.fonteEstoque ? `<div class="meta" style="color:var(--danger); font-weight:600;">⚠️ Estoque ainda não reservado — toque em Editar e salve para corrigir</div>` : ''}
         ${e.obs ? `<div class="meta">📌 ${escapeHtml(e.obs)}</div>` : ''}
       </div>
       <div class="actions">
