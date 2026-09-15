@@ -688,6 +688,12 @@
     <label>Cliente</label>
     <select id="encomendaCliente"></select>
 
+    <label>De onde vai sair o estoque?</label>
+    <select id="encomendaFonte" onchange="renderEncomendaProdutoOptions()">
+      <option value="trabalho">🏢 Estoque do trabalho</option>
+      <option value="casa">🏠 Estoque de casa</option>
+    </select>
+
     <label>Adicionar item</label>
     <div class="item-row">
       <select id="encomendaProdutoSelect"></select>
@@ -725,12 +731,8 @@
       <button class="close-x" onclick="fecharEntregaEncomenda()">✕</button>
     </div>
     <div id="entregaEncomendaInfo" class="meta" style="margin-bottom:12px;"></div>
-    <label>De onde vai sair o estoque?</label>
-    <select id="entregaFonte">
-      <option value="trabalho">🏢 Estoque do trabalho</option>
-      <option value="casa">🏠 Estoque de casa</option>
-    </select>
-    <div id="entregaJaPagoAviso" class="voz-transcricao" style="display:none; margin-top:12px;"></div>
+    <div id="entregaFonteInfo" class="meta" style="margin-bottom:12px;"></div>
+    <div id="entregaJaPagoAviso" class="voz-transcricao" style="display:none; margin-bottom:12px;"></div>
     <div id="entregaFormaGroup">
       <label>Forma de pagamento</label>
       <select id="entregaForma">
@@ -1114,17 +1116,36 @@ function switchView(name){
 let encomendas = DB.get('cv_encomendas');
 let encomendaItensTemp = [];
 let encomendaEditId = null;
+let encomendaEditOriginal = null;
+function estoqueEfetivoEncomenda(produto, fonte){
+  const campo = fonte === 'casa' ? 'estoqueCasa' : 'estoque';
+  let base = produto[campo] || 0;
+  if(encomendaEditOriginal && encomendaEditOriginal.fonteEstoque === fonte){
+    const oi = encomendaEditOriginal.itens.find(i => i.produtoId === produto.id);
+    if(oi) base += oi.qtd;
+  }
+  return base;
+}
+function renderEncomendaProdutoOptions(){
+  const fonte = document.getElementById('encomendaFonte').value;
+  const pSel = document.getElementById('encomendaProdutoSelect');
+  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => {
+    const efetivo = estoqueEfetivoEncomenda(p, fonte);
+    return `<option value="${p.id}" ${efetivo<=0?'disabled':''}>${escapeHtml(p.nome)} — ${efetivo<=0?'sem estoque':'estoque: '+efetivo+' '+unidadeProduto(p)}</option>`;
+  }).join('');
+}
 function openEncomendaModal(){
   if(!produtos.length){ alert('Cadastre ao menos um produto antes de criar uma encomenda.'); switchView('produtos'); return; }
   encomendaEditId = null;
+  encomendaEditOriginal = null;
   encomendaItensTemp = [];
   document.getElementById('encomendaModalTitle').textContent = 'Nova encomenda';
   document.getElementById('encomendaSalvarBtn').textContent = 'Salvar encomenda';
   const cSel = document.getElementById('encomendaCliente');
   cSel.innerHTML = '<option value="">Consumidor não identificado</option>' +
     clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
-  const pSel = document.getElementById('encomendaProdutoSelect');
-  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('');
+  document.getElementById('encomendaFonte').value = 'trabalho';
+  renderEncomendaProdutoOptions();
   document.getElementById('encomendaItemQtd').value = 1;
   document.getElementById('encomendaObs').value = '';
   document.getElementById('encomendaJaPago').checked = false;
@@ -1145,7 +1166,15 @@ function addItemEncomenda(){
   const qtd = parseInt(document.getElementById('encomendaItemQtd').value) || 1;
   const produto = produtos.find(p => p.id === produtoId);
   if(!produto) return;
+  const fonte = document.getElementById('encomendaFonte').value;
   const existente = encomendaItensTemp.find(i => i.produtoId === produtoId);
+  const jaNoCarrinho = existente ? existente.qtd : 0;
+  const efetivo = estoqueEfetivoEncomenda(produto, fonte);
+  if(jaNoCarrinho + qtd > efetivo){
+    const disponivel = Math.max(0, efetivo - jaNoCarrinho);
+    alert(`Estoque insuficiente ${fonte==='casa'?'em casa':'no trabalho'} para "${produto.nome}". Disponível: ${disponivel} ${unidadeProduto(produto)}.`);
+    return;
+  }
   if(existente){ existente.qtd += qtd; }
   else { encomendaItensTemp.push({ produtoId, nome: produto.nome, unidade: unidadeProduto(produto), qtd }); }
   document.getElementById('encomendaItemQtd').value = 1;
@@ -1170,6 +1199,7 @@ function editarEncomenda(id){
   if(e.status !== 'Pendente'){ alert('Só é possível editar encomendas que ainda estão pendentes.'); return; }
   if(!produtos.length){ alert('Cadastre ao menos um produto antes de editar uma encomenda.'); switchView('produtos'); return; }
   encomendaEditId = e.id;
+  encomendaEditOriginal = JSON.parse(JSON.stringify(e));
   encomendaItensTemp = e.itens.map(i => ({...i}));
   document.getElementById('encomendaModalTitle').textContent = 'Editar encomenda';
   document.getElementById('encomendaSalvarBtn').textContent = 'Salvar alterações';
@@ -1177,8 +1207,8 @@ function editarEncomenda(id){
   cSel.innerHTML = '<option value="">Consumidor não identificado</option>' +
     clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join('');
   cSel.value = e.clienteId || '';
-  const pSel = document.getElementById('encomendaProdutoSelect');
-  pSel.innerHTML = produtos.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(p => `<option value="${p.id}">${escapeHtml(p.nome)}</option>`).join('');
+  document.getElementById('encomendaFonte').value = e.fonteEstoque || 'trabalho';
+  renderEncomendaProdutoOptions();
   document.getElementById('encomendaItemQtd').value = 1;
   document.getElementById('encomendaObs').value = e.obs || '';
   document.getElementById('encomendaJaPago').checked = !!e.pago;
@@ -1199,15 +1229,35 @@ function salvarEncomenda(){
   const jaPago = document.getElementById('encomendaJaPago').checked;
   const obs = document.getElementById('encomendaObs').value.trim();
   const formaPagamento = jaPago ? document.getElementById('encomendaFormaPagamento').value : null;
+  const fonte = document.getElementById('encomendaFonte').value;
+  const campoEstoque = fonte === 'casa' ? 'estoqueCasa' : 'estoque';
+
+  // valida estoque disponível (considerando o que já estava reservado, se for edição)
+  const semEstoque = encomendaItensTemp.filter(i => {
+    const p = produtos.find(p => p.id === i.produtoId);
+    return !p || i.qtd > estoqueEfetivoEncomenda(p, fonte);
+  });
+  if(semEstoque.length){
+    alert(`Não há estoque suficiente ${fonte==='casa'?'em casa':'no trabalho'} para: ` + semEstoque.map(i=>i.nome).join(', ') + '.');
+    return;
+  }
 
   if(encomendaEditId){
     const e = encomendas.find(x => x.id === encomendaEditId);
     if(e){
+      // devolve a reserva antiga antes de aplicar a nova
+      const campoAntigo = e.fonteEstoque === 'casa' ? 'estoqueCasa' : 'estoque';
+      e.itens.forEach(i => {
+        const p = produtos.find(p => p.id === i.produtoId);
+        if(p){ p[campoAntigo] = (p[campoAntigo] || 0) + i.qtd; }
+      });
+
       e.clienteId = clienteId || null;
       e.itens = encomendaItensTemp;
       e.obs = obs;
       e.pago = jaPago;
       e.formaPagamento = formaPagamento;
+      e.fonteEstoque = fonte;
 
       if(jaPago){
         const itensVenda = itensEncomendaParaVenda(encomendaItensTemp);
@@ -1236,7 +1286,8 @@ function salvarEncomenda(){
       data: todayISO(),
       status: 'Pendente',
       pago: jaPago,
-      formaPagamento
+      formaPagamento,
+      fonteEstoque: fonte
     };
     if(jaPago){
       const itensVenda = itensEncomendaParaVenda(encomendaItensTemp);
@@ -1248,26 +1299,48 @@ function salvarEncomenda(){
     }
     encomendas.push(novaEncomenda);
   }
+
+  // reserva (desconta) o estoque na fonte escolhida
+  encomendaItensTemp.forEach(i => {
+    const p = produtos.find(p => p.id === i.produtoId);
+    if(p){ p[campoEstoque] = Math.max(0, (p[campoEstoque] || 0) - i.qtd); }
+  });
+  DB.set('cv_produtos', produtos);
+
   DB.set('cv_encomendas', encomendas);
   encomendaEditId = null;
+  encomendaEditOriginal = null;
   closeEncomendaModal();
   renderEncomendas();
+  renderProdutos();
 }
 function excluirEncomenda(id){
   const enc = encomendas.find(e => e.id === id);
   if(!enc) return;
-  const temVendaPendenteDeEntrega = enc.vendaId && enc.status !== 'Entregue';
-  const msg = temVendaPendenteDeEntrega
-    ? 'Excluir esta encomenda? O pagamento já registrado como venda também será removido, já que a entrega não aconteceu.'
-    : 'Excluir esta encomenda?';
+  const aindaNaoEntregue = enc.status !== 'Entregue';
+  let msg = 'Excluir esta encomenda?';
+  if(aindaNaoEntregue){
+    msg = enc.vendaId
+      ? 'Excluir esta encomenda? O estoque reservado será devolvido e o pagamento já registrado como venda também será removido, já que a entrega não aconteceu.'
+      : 'Excluir esta encomenda? O estoque reservado será devolvido.';
+  }
   if(!confirm(msg)) return;
-  if(temVendaPendenteDeEntrega){
-    vendas = vendas.filter(v => v.id !== enc.vendaId);
-    DB.set('cv_vendas', vendas);
+  if(aindaNaoEntregue){
+    const campo = enc.fonteEstoque === 'casa' ? 'estoqueCasa' : 'estoque';
+    enc.itens.forEach(i => {
+      const p = produtos.find(p => p.id === i.produtoId);
+      if(p){ p[campo] = (p[campo] || 0) + i.qtd; }
+    });
+    DB.set('cv_produtos', produtos);
+    if(enc.vendaId){
+      vendas = vendas.filter(v => v.id !== enc.vendaId);
+      DB.set('cv_vendas', vendas);
+    }
   }
   encomendas = encomendas.filter(e => e.id !== id);
   DB.set('cv_encomendas', encomendas);
   renderEncomendas();
+  renderProdutos();
 }
 let encomendaEntregaId = null;
 function abrirEntregaEncomenda(id){
@@ -1276,13 +1349,14 @@ function abrirEntregaEncomenda(id){
   encomendaEntregaId = id;
   const itensTxt = enc.itens.map(i => `${fmtQtdItem(i)} ${i.nome}`).join(', ');
   document.getElementById('entregaEncomendaInfo').innerHTML = `<strong style="color:var(--ink);">${escapeHtml(nomeCliente(enc.clienteId))}</strong><br>${escapeHtml(itensTxt)}`;
-  document.getElementById('entregaFonte').value = 'trabalho';
+  const fonteTxt = enc.fonteEstoque === 'casa' ? '🏠 Estoque de casa' : '🏢 Estoque do trabalho';
+  document.getElementById('entregaFonteInfo').innerHTML = `Estoque já reservado em: <strong style="color:var(--ink);">${fonteTxt}</strong>`;
   if(enc.pago){
     document.getElementById('entregaForma').value = enc.formaPagamento || 'Pix';
     document.getElementById('entregaFormaGroup').style.display = 'none';
     const aviso = document.getElementById('entregaJaPagoAviso');
     aviso.style.display = 'block';
-    aviso.textContent = `💰 Este cliente já pagou (${enc.formaPagamento || 'Pix'}) e já está contabilizado nas vendas — falta só dar baixa no estoque.`;
+    aviso.textContent = `💰 Este cliente já pagou (${enc.formaPagamento || 'Pix'}) e já está contabilizado nas vendas.`;
   } else {
     document.getElementById('entregaForma').value = 'Pix';
     document.getElementById('entregaFormaGroup').style.display = 'block';
@@ -1297,22 +1371,8 @@ function fecharEntregaEncomenda(){
 function confirmarEntregaEncomenda(){
   const enc = encomendas.find(e => e.id === encomendaEntregaId);
   if(!enc) return;
-  const fonte = document.getElementById('entregaFonte').value;
-  const campoEstoque = fonte === 'casa' ? 'estoqueCasa' : 'estoque';
 
-  const semEstoque = enc.itens.filter(i => {
-    const p = produtos.find(p => p.id === i.produtoId);
-    return !p || i.qtd > (p[campoEstoque] || 0);
-  });
-  if(semEstoque.length){
-    const local = fonte === 'casa' ? 'em casa' : 'no trabalho';
-    alert(`Não há estoque suficiente ${local} para: ` + semEstoque.map(i=>i.nome).join(', ') + '.');
-    return;
-  }
-
-  if(enc.vendaId){
-    // já foi contabilizado como venda quando a encomenda foi marcada como paga — só falta a baixa de estoque
-  } else {
+  if(!enc.vendaId){
     const forma = document.getElementById('entregaForma').value;
     const itensVenda = itensEncomendaParaVenda(enc.itens);
     const total = itensVenda.reduce((s,i) => s + i.qtd * i.precoUnit, 0);
@@ -1330,14 +1390,9 @@ function confirmarEntregaEncomenda(){
     enc.vendaId = venda.id;
   }
 
-  enc.itens.forEach(i => {
-    const p = produtos.find(p => p.id === i.produtoId);
-    if(p){ p[campoEstoque] = Math.max(0, (p[campoEstoque] || 0) - i.qtd); }
-  });
-  DB.set('cv_produtos', produtos);
-
+  // o estoque já foi reservado (descontado) no momento em que a encomenda foi criada
   enc.status = 'Entregue';
-  enc.entregueDe = fonte;
+  enc.entregueDe = enc.fonteEstoque;
   DB.set('cv_encomendas', encomendas);
 
   fecharEntregaEncomenda();
@@ -1352,7 +1407,7 @@ function renderEncomendas(){
     <div class="list-item">
       <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
         <div class="name">${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}</div>
-        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}</div>
+        <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')} · reservado ${e.fonteEstoque === 'casa' ? '🏠 em casa' : '🏢 no trabalho'}</div>
         ${e.obs ? `<div class="meta">📌 ${escapeHtml(e.obs)}</div>` : ''}
       </div>
       <div class="actions">
@@ -1385,7 +1440,7 @@ function abrirDetalheEncomenda(id){
   document.getElementById('detalheEncomendaConteudo').innerHTML = `
     <div style="margin-bottom:12px;">
       <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}${pagoBadge}</div>
-      <div class="meta">${fmtDate(e.data)}${e.status==='Entregue' ? (' · veio ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
+      <div class="meta">${fmtDate(e.data)} · reservado ${e.fonteEstoque==='casa' ? '🏠 em casa' : '🏢 no trabalho'}${e.status==='Entregue' ? (' · entregue ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
     </div>
     <label>Itens</label>
     <div class="chip-list">${itensHtml}</div>
