@@ -1350,6 +1350,7 @@ function salvarEncomenda(){
   const formaPagamento = jaPago ? document.getElementById('encomendaFormaPagamento').value : null;
   const fonte = document.getElementById('encomendaFonte').value;
   const campoEstoque = fonte === 'casa' ? 'estoqueCasa' : 'estoque';
+  const ehNova = !encomendaEditId;
 
   // valida estoque disponível (considerando o que já estava reservado, se for edição)
   const semEstoque = encomendaItensTemp.filter(i => {
@@ -1436,6 +1437,21 @@ function salvarEncomenda(){
   closeEncomendaModal();
   renderEncomendas();
   renderProdutos();
+  if(ehNova){ enviarConfirmacaoPedido(clienteId, encomendaItensTemp, obs, jaPago, formaPagamento); }
+}
+function enviarConfirmacaoPedido(clienteId, itens, obs, jaPago, formaPagamento){
+  const tel = telefoneCliente(clienteId);
+  if(!tel) return;
+  let digitos = tel.replace(/\D/g, '');
+  if(digitos.length <= 11){ digitos = '55' + digitos; }
+  const nome = nomeCliente(clienteId);
+  const listaItens = itens.map(i => `- ${fmtQtdItem(i)} ${i.nome}`).join('\n');
+  let msg = `Olá ${nome}! Encomenda realizada:\n\n${listaItens}`;
+  if(obs){ msg += `\n\n📌 ${obs}`; }
+  msg += jaPago ? `\n\nPagamento confirmado (${formaPagamento}).` : `\n\nPagamento a combinar na entrega.`;
+  if(!jaPago && config.pixKey){ msg += `\n\nChave Pix: ${config.pixKey}`; }
+  msg += `\n\nObrigado pela preferência! 😊`;
+  window.open(whatsappUrl(digitos, msg), '_blank');
 }
 function excluirEncomenda(id){
   const enc = encomendas.find(e => e.id === id);
@@ -2516,6 +2532,7 @@ function atualizarCampoDividido(){
 }
 function salvarVenda(){
   if(!vendaItensTemp.length){ alert('Adicione ao menos um item à venda.'); return; }
+  const ehNovaVenda = !vendaEditId;
   const semEstoque = vendaItensTemp.filter(i => {
     const p = produtos.find(p => p.id === i.produtoId);
     return !p || i.qtd > estoqueEfetivo(p);
@@ -2573,6 +2590,24 @@ function salvarVenda(){
   vendaEditOriginal = null;
   closeVendaModal();
   renderVendas();
+  if(ehNovaVenda){ enviarConfirmacaoVenda(venda); }
+}
+function enviarConfirmacaoVenda(venda){
+  const tel = telefoneCliente(venda.clienteId);
+  if(!tel) return;
+  let digitos = tel.replace(/\D/g, '');
+  if(digitos.length <= 11){ digitos = '55' + digitos; }
+  const nome = nomeCliente(venda.clienteId);
+  const listaItens = venda.itens.map(i => `- ${fmtQtdItem(i)} ${i.nome}`).join('\n');
+  let msg = `Olá ${nome}! Venda realizada:\n\n${listaItens}\n\nTotal: ${fmtMoney(venda.total)}`;
+  if(venda.forma === 'Dividido'){
+    msg += `\n\nPago agora: ${fmtMoney(venda.valorPago||0)} · Falta: ${fmtMoney(venda.valorFiado||0)}`;
+  } else {
+    msg += `\n\nForma de pagamento: ${venda.forma}`;
+  }
+  if(config.pixKey){ msg += `\n\nChave Pix: ${config.pixKey}`; }
+  msg += `\n\nObrigado pela preferência! 😊`;
+  window.open(whatsappUrl(digitos, msg), '_blank');
 }
 function marcarComoPago(id){
   const v = vendas.find(v => v.id === id);
