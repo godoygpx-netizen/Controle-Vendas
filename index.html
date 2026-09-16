@@ -808,6 +808,7 @@
       <button class="close-x" onclick="fecharHistoricoCliente()">✕</button>
     </div>
     <div id="historicoClienteResumo" class="stat-grid" style="margin-bottom:14px;"></div>
+    <button class="btn btn-gold" id="historicoCobrarTudo" style="display:none; margin-bottom:14px;">📲 Cobrar tudo via WhatsApp</button>
     <div id="historicoClienteLista"></div>
   </div>
 </div>
@@ -1895,6 +1896,14 @@ function abrirHistoricoCliente(id){
     ${totalPendente > 0 ? `<div class="stat" style="grid-column:1/-1; background:var(--danger);"><div class="num">${fmtMoney(totalPendente)}</div><div class="lbl">Pendente</div></div>` : ''}
   `;
 
+  const btnCobrarTudo = document.getElementById('historicoCobrarTudo');
+  if(totalPendente > 0 && c.telefone){
+    btnCobrarTudo.style.display = 'block';
+    btnCobrarTudo.onclick = () => cobrarTudoCliente(id);
+  } else {
+    btnCobrarTudo.style.display = 'none';
+  }
+
   const lista = document.getElementById('historicoClienteLista');
   if(!vendasCliente.length){
     lista.innerHTML = '<div class="empty">Esse cliente ainda não fez nenhuma compra.</div>';
@@ -1911,6 +1920,26 @@ function abrirHistoricoCliente(id){
   }
 
   document.getElementById('historicoClienteModalBg').classList.add('active');
+}
+function cobrarTudoCliente(id){
+  const c = clientes.find(x => x.id === id);
+  if(!c || !c.telefone) return;
+  const pendentes = vendas.filter(v => v.clienteId === id && v.status === 'Pendente').sort((a,b) => a.data.localeCompare(b.data));
+  if(!pendentes.length) return;
+
+  let digitos = c.telefone.replace(/\D/g, '');
+  if(digitos.length <= 11){ digitos = '55' + digitos; }
+
+  const linhas = pendentes.map(v => {
+    const itensTxt = v.itens.map(i => `${fmtQtdItem(i)} ${i.nome}`).join(', ');
+    return `📅 ${fmtDate(v.data)}: ${itensTxt} — ${fmtMoney(valorPendenteVenda(v))}`;
+  }).join('\n');
+  const totalPendente = pendentes.reduce((s,v) => s + valorPendenteVenda(v), 0);
+
+  let msg = `Olá ${c.nome}! Passando para lembrar dos pagamentos pendentes:\n\n${linhas}\n\nTotal pendente: ${fmtMoney(totalPendente)}`;
+  if(config.pixKey){ msg += `\n\nChave Pix: ${config.pixKey}`; }
+  msg += `\n\nObrigado! 😊`;
+  window.open(whatsappUrl(digitos, msg), '_blank');
 }
 function fecharHistoricoCliente(){
   document.getElementById('historicoClienteModalBg').classList.remove('active');
