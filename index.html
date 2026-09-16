@@ -1463,6 +1463,7 @@ function excluirEncomenda(id){
     vendas = vendas.filter(v => v.id !== enc.vendaId);
     DB.set('cv_vendas', vendas);
   }
+  if(checklistSeparados.has(id)){ checklistSeparados.delete(id); salvarChecklistSeparados(); }
   encomendas = encomendas.filter(e => e.id !== id);
   DB.set('cv_encomendas', encomendas);
   renderEncomendas();
@@ -1520,6 +1521,7 @@ function confirmarEntregaEncomenda(){
   enc.status = 'Entregue';
   enc.entregueDe = enc.fonteEstoque;
   DB.set('cv_encomendas', encomendas);
+  if(checklistSeparados.has(enc.id)){ checklistSeparados.delete(enc.id); salvarChecklistSeparados(); }
 
   fecharEntregaEncomenda();
   renderEncomendas();
@@ -1571,9 +1573,13 @@ function toggleEncomendaDetalheInline(id){
   document.querySelectorAll('.encomenda-detalhe-wrap').forEach(w => { if(w !== el) w.style.display = 'none'; });
   el.style.display = abrir ? 'block' : 'none';
 }
+let checklistSeparados = new Set(JSON.parse(localStorage.getItem('cv_checklistSeparados') || '[]'));
+function salvarChecklistSeparados(){
+  localStorage.setItem('cv_checklistSeparados', JSON.stringify(Array.from(checklistSeparados)));
+}
 function renderChecklistSeparar(pendentes){
   const el = document.getElementById('checklistSepararCard');
-  const daCasa = pendentes.filter(e => e.fonteEstoque === 'casa');
+  const daCasa = pendentes.filter(e => e.fonteEstoque === 'casa' && !checklistSeparados.has(e.id));
   if(!daCasa.length){ el.innerHTML = ''; return; }
   const totais = {};
   daCasa.forEach(e => {
@@ -1593,8 +1599,15 @@ function renderChecklistSeparar(pendentes){
       <h3 style="border-left:none; padding-left:0;">🎒 Separar de casa para levar</h3>
       <div class="meta" style="margin-bottom:8px;">Some tudo isso de ${daCasa.length} encomenda(s) ainda não entregue(s):</div>
       ${linhas}
+      <button class="btn btn-gold btn-sm" style="margin-top:12px;" onclick="zerarChecklistSeparar()">✅ Já separei tudo</button>
     </div>
   `;
+}
+function zerarChecklistSeparar(){
+  const pendentes = encomendas.filter(e => e.status === 'Pendente' && e.fonteEstoque === 'casa');
+  pendentes.forEach(e => checklistSeparados.add(e.id));
+  salvarChecklistSeparados();
+  renderEncomendas();
 }
 function abrirDetalheEncomenda(id){
   const e = encomendas.find(x => x.id === id);
