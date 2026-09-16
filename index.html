@@ -2767,12 +2767,16 @@ function renderResumo(){
   const totalPendente = vendas.filter(v=>v.status==='Pendente').reduce((s,v)=>s+valorPendenteVenda(v),0);
   const custoMes = doMes.reduce((s,v)=>s + v.itens.reduce((si,i)=>si + (i.custoUnit||0)*i.qtd, 0), 0);
   const lucroMes = totalMes - custoMes;
+  const doMesPagas = doMes.filter(v => v.status === 'Pago');
+  const custoMesPago = doMesPagas.reduce((s,v)=>s + v.itens.reduce((si,i)=>si + (i.custoUnit||0)*i.qtd, 0), 0);
+  const lucroRecebido = doMesPagas.reduce((s,v)=>s+v.total,0) - custoMesPago;
   const degustacoes = doMesTudo.filter(v => v.forma === 'Cortesia').length;
 
   document.getElementById('resumoStats').innerHTML = `
     <div class="stat"><div class="num">${fmtMoney(totalMes)}</div><div class="lbl">Vendido este mês</div></div>
     <div class="stat gold"><div class="num">${doMesTudo.length}</div><div class="lbl">Vendas este mês${degustacoes ? ` (${degustacoes} cortesia)` : ''}</div></div>
-    <div class="stat" style="grid-column:1/-1;"><div class="num">${fmtMoney(lucroMes)}</div><div class="lbl">Lucro estimado este mês (não inclui cortesias)</div></div>
+    <div class="stat"><div class="num">${fmtMoney(lucroMes)}</div><div class="lbl">Lucro estimado este mês (não inclui cortesias)</div></div>
+    <div class="stat gold"><div class="num">${fmtMoney(lucroRecebido)}</div><div class="lbl">Lucro já recebido (só pedidos pagos)</div></div>
   `;
 
   renderGraficoVendasPorMes();
