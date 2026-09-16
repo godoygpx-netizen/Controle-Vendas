@@ -534,8 +534,10 @@
       <div id="listaEncomendasPendentes"></div>
     </div>
     <div class="card">
-      <h3>Entregues</h3>
-      <div id="listaEncomendasEntregues"></div>
+      <h3 style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="toggleCollapse('listaEncomendasEntreguesWrap','entreguesChevron')"><span>Entregues <span id="entreguesContador" style="color:var(--ink-soft); font-weight:400;"></span></span> <span id="entreguesChevron" style="font-size:13px; color:var(--ink-soft);">▸</span></h3>
+      <div id="listaEncomendasEntreguesWrap" style="display:none;">
+        <div id="listaEncomendasEntregues"></div>
+      </div>
     </div>
   </section>
 
@@ -1495,17 +1497,19 @@ function renderEncomendas(){
 
   const elP = document.getElementById('listaEncomendasPendentes');
   elP.innerHTML = pendentes.length ? pendentes.map(e => `
-    <div class="list-item${e.fonteEstoque === 'casa' ? ' precisa-separar' : ''}">
-      <div class="info" onclick="abrirDetalheEncomenda('${e.id}')" style="cursor:pointer;">
+    <div class="list-item${e.fonteEstoque === 'casa' ? ' precisa-separar' : ''}" style="display:block;">
+      <div class="venda-resumo" onclick="toggleEncomendaDetalheInline('${e.id}')">
         <div class="name">${e.fonteEstoque === 'casa' ? '🎒 ' : ''}${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}${e.estoqueReservado ? ' <span class="badge estoque-ok">✅ Descontado</span>' : ''}</div>
+      </div>
+      <div class="encomenda-detalhe-wrap" id="encomendaDetalheInline-${e.id}" style="display:none; margin-top:8px;">
         <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}${e.estoqueReservado ? ` · ${e.fonteEstoque === 'casa' ? '🏠 trazer de casa' : '🏢 já está no trabalho'}` : ''}</div>
         ${!e.estoqueReservado ? `<div class="meta" style="color:var(--danger); font-weight:600;">⚠️ Estoque ainda não reservado — toque em Editar e salve para corrigir</div>` : ''}
         ${e.obs ? `<div class="meta">📌 ${escapeHtml(e.obs)}</div>` : ''}
-      </div>
-      <div class="actions">
-        <button class="icon-btn primary" onclick="abrirEntregaEncomenda('${e.id}')">🚚 Entregar</button>
-        <button class="icon-btn" onclick="editarEncomenda('${e.id}')">Editar</button>
-        <button class="icon-btn del" onclick="excluirEncomenda('${e.id}')">Excluir</button>
+        <div class="actions" style="margin-top:8px;">
+          <button class="icon-btn primary" onclick="abrirEntregaEncomenda('${e.id}')">🚚 Entregar</button>
+          <button class="icon-btn" onclick="editarEncomenda('${e.id}')">Editar</button>
+          <button class="icon-btn del" onclick="excluirEncomenda('${e.id}')">Excluir</button>
+        </div>
       </div>
     </div>
   `).join('') : '<div class="empty">Nenhuma encomenda pendente.</div>';
@@ -1522,6 +1526,15 @@ function renderEncomendas(){
       </div>
     </div>
   `).join('') : '<div class="empty">Nenhuma encomenda entregue ainda.</div>';
+
+  document.getElementById('entreguesContador').textContent = `(${entregues.length})`;
+}
+function toggleEncomendaDetalheInline(id){
+  const el = document.getElementById('encomendaDetalheInline-' + id);
+  if(!el) return;
+  const abrir = el.style.display === 'none';
+  document.querySelectorAll('.encomenda-detalhe-wrap').forEach(w => { if(w !== el) w.style.display = 'none'; });
+  el.style.display = abrir ? 'block' : 'none';
 }
 function renderChecklistSeparar(pendentes){
   const el = document.getElementById('checklistSepararCard');
