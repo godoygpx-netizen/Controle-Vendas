@@ -2855,24 +2855,72 @@ function renderResumo(){
 
   const contagem = {};
   doMes.forEach(v => v.itens.forEach(i => {
-    if(!contagem[i.nome]){ contagem[i.nome] = { qtd: 0, unidade: i.unidade || 'un' }; }
-    contagem[i.nome].qtd += i.qtd;
+    const chave = i.produtoId || i.nome;
+    if(!contagem[chave]){ contagem[chave] = { nome: i.nome, unidade: i.unidade || 'un', qtd: 0, porCliente: {} }; }
+    contagem[chave].qtd += i.qtd;
+    const chaveCliente = v.clienteId || 'sem-cliente';
+    if(!contagem[chave].porCliente[chaveCliente]){ contagem[chave].porCliente[chaveCliente] = 0; }
+    contagem[chave].porCliente[chaveCliente] += i.qtd;
   }));
   const top = Object.entries(contagem).sort((a,b)=>b[1].qtd-a[1].qtd).slice(0,5);
-  document.getElementById('resumoTopProdutos').innerHTML = top.length ? top.map(([nome,info]) => `
-    <div class="list-item"><div class="info name">${escapeHtml(nome)}</div><div>${fmtQtdItem({qtd: info.qtd, unidade: info.unidade})}</div></div>
-  `).join('') : '<div class="empty">Sem vendas este mês.</div>';
-
-  const pendentes = vendas.filter(v => v.status === 'Pendente').sort((a,b)=>a.data.localeCompare(b.data));
-  document.getElementById('resumoPendentes').innerHTML = pendentes.length ? `
-    ${pendentes.map(v => `
-      <div class="list-item pendente-destaque">
-        <div class="info"><div class="name">${escapeHtml(nomeCliente(v.clienteId))}</div><div class="meta">${fmtDate(v.data)} · ${fmtMoney(valorPendenteVenda(v))}${v.forma==='Dividido' ? ' (dividido)' : ''}</div></div>
-        ${linkCobrancaWhatsapp(v) ? `<a class="icon-btn whats" href="${linkCobrancaWhatsapp(v)}" target="_blank" rel="noopener">Cobrar</a>` : ''}
+  document.getElementById('resumoTopProdutos').innerHTML = top.length ? top.map(([chave,info], idx) => {
+    const clientesTxt = Object.entries(info.porCliente)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([cid,q]) => `${escapeHtml(cid==='sem-cliente' ? 'Consumidor não identificado' : nomeCliente(cid))} (${fmtQtdItem({qtd:q, unidade:info.unidade})})`)
+      .join(', ');
+    return `
+    <div class="list-item" style="display:block;">
+      <div class="venda-resumo" onclick="toggleDetalheGenerico('topProduto-${idx}')">
+        <div class="info name">${escapeHtml(info.nome)}</div>
+        <div class="venda-valor">${fmtQtdItem({qtd: info.qtd, unidade: info.unidade})}</div>
       </div>
-    `).join('')}
+      <div class="venda-detalhe-wrap" id="detalhe-topProduto-${idx}" style="display:none;">
+        <div class="meta">${clientesTxt}</div>
+      </div>
+    </div>
+  `;
+  }).join('') : '<div class="empty">Sem vendas este mês.</div>';
+
+  const pendentesPorCliente = {};
+  vendas.filter(v => v.status === 'Pendente').forEach(v => {
+    const chave = v.clienteId || 'sem-cliente';
+    if(!pendentesPorCliente[chave]){ pendentesPorCliente[chave] = []; }
+    pendentesPorCliente[chave].push(v);
+  });
+  const gruposPendentes = Object.entries(pendentesPorCliente).map(([chave, lista]) => ({
+    clienteId: chave === 'sem-cliente' ? null : chave,
+    chave,
+    vendas: lista.sort((a,b)=>a.data.localeCompare(b.data)),
+    total: lista.reduce((s,v)=>s+valorPendenteVenda(v),0)
+  })).sort((a,b)=>b.total-a.total);
+
+  document.getElementById('resumoPendentes').innerHTML = gruposPendentes.length ? `
+    ${gruposPendentes.map(g => {
+      const cliente = g.clienteId ? clientes.find(c=>c.id===g.clienteId) : null;
+      return `
+      <div class="list-item pendente-destaque" style="display:block;">
+        <div class="venda-resumo" onclick="toggleDetalheGenerico('resumoPend-${g.chave}')">
+          <div class="name">${escapeHtml(nomeCliente(g.clienteId))} ${g.vendas.length > 1 ? `<span class="badge pendente">${g.vendas.length}x</span>` : ''}</div>
+          <div class="venda-valor">${fmtMoney(g.total)}</div>
+        </div>
+        <div class="venda-detalhe-wrap" id="detalhe-resumoPend-${g.chave}" style="display:none;">
+          ${g.vendas.map(v => `<div class="meta">${fmtDate(v.data)} · ${v.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')} — ${fmtMoney(valorPendenteVenda(v))}${v.forma==='Dividido' ? ' (dividido)' : ''}</div>`).join('')}
+          <div class="actions" style="margin-top:8px;">
+            ${g.vendas.length > 1 && cliente && cliente.telefone ? `<button class="icon-btn whats" onclick="cobrarTudoCliente('${g.clienteId}')">📲 Cobrar tudo</button>` : (linkCobrancaWhatsapp(g.vendas[0]) ? `<a class="icon-btn whats" href="${linkCobrancaWhatsapp(g.vendas[0])}" target="_blank" rel="noopener">Cobrar</a>` : '')}
+          </div>
+        </div>
+      </div>
+    `;
+    }).join('')}
     <div class="total-line"><span>Total a receber</span><span>${fmtMoney(totalPendente)}</span></div>
   ` : '<div class="empty">Nenhum valor pendente 🎉</div>';
+}
+function toggleDetalheGenerico(chave){
+  const el = document.getElementById('detalhe-' + chave);
+  if(!el) return;
+  const abrir = el.style.display === 'none';
+  document.querySelectorAll('.venda-detalhe-wrap').forEach(w => { if(w !== el) w.style.display = 'none'; });
+  el.style.display = abrir ? 'block' : 'none';
 }
 
 function fmtQtdItem(item){
