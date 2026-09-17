@@ -58,6 +58,10 @@
   header.top .brand{display:flex; align-items:baseline; justify-content:space-between;}
   header.top h1{font-size:21px; letter-spacing:.01em; color:var(--ink); font-weight:600;}
   header.top .tagline{font-size:12.5px; color:var(--ink-soft); margin-top:5px;}
+  .sync-indicator{font-size:15px; opacity:.75; transition:opacity .2s ease;}
+  .sync-indicator.sincronizando{animation:girarSync 1s linear infinite;}
+  .sync-indicator.erro{opacity:1; filter:grayscale(0);}
+  @keyframes girarSync{ from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
   main{padding:16px 14px;}
   .view{display:none;}
   .view.active{display:block; animation:fade .15s ease;}
@@ -404,6 +408,7 @@
 <header class="top">
   <div class="brand">
     <h1>🛒 Controle de Vendas</h1>
+    <span id="syncIndicator" class="sync-indicator" title="Sincronização com a nuvem">☁️</span>
   </div>
   <div class="tagline" id="tagline">Clientes, produtos e vendas em um só lugar</div>
 </header>
@@ -423,6 +428,7 @@
     <div class="card" id="vendasResumoMes"></div>
     <div class="card">
       <h3>Histórico</h3>
+      <input id="buscaVendas" placeholder="🔎 Buscar por nome do cliente..." oninput="renderVendas()" style="margin-bottom:12px;">
       <div id="listaVendas"></div>
     </div>
   </section>
@@ -559,6 +565,7 @@
   <section class="view" id="view-resumo">
     <div class="section-head"><h2>Resumo</h2></div>
     <div class="stat-grid" id="resumoStats"></div>
+    <div id="resumoMetaCard"></div>
     <div class="card" style="margin-top:12px;">
       <h3>Vendas por mês</h3>
       <div id="resumoGrafico"></div>
@@ -584,6 +591,8 @@
       <h3>Configurações</h3>
       <label>Chave Pix (usada na mensagem de cobrança)</label>
       <input id="configPixKey" placeholder="CPF, e-mail, telefone ou chave aleatória" oninput="salvarConfig()">
+      <label>Meta de vendas do mês (R$)</label>
+      <input id="configMetaMensal" type="number" step="0.01" min="0" placeholder="Ex: 1000,00" oninput="salvarConfig(); renderResumo();">
     </div>
     <div class="card">
       <h3>Backup dos dados</h3>
@@ -744,6 +753,9 @@
     </div>
     <div class="chip-list" id="encomendaItens"></div>
 
+    <label>Data prevista de entrega (opcional)</label>
+    <input id="encomendaDataEntrega" type="date">
+
     <label>Observação (opcional)</label>
     <input id="encomendaObs" placeholder="Ex: cliente prefere entrega à tarde">
 
@@ -899,11 +911,26 @@ let currentUser = null;
 let cloudSyncPronto = false;
 const CLOUD_KEYS = ['cv_clientes','cv_produtos','cv_vendas','cv_config','cv_fornecedores','cv_encomendas'];
 
+let syncPendentes = 0;
+function atualizarIndicadorSync(){
+  const el = document.getElementById('syncIndicator');
+  if(!el) return;
+  if(!currentUser){ el.textContent = '☁️'; el.title = 'Não conectado'; el.className = 'sync-indicator'; return; }
+  if(syncPendentes > 0){ el.textContent = '🔄'; el.title = 'Sincronizando...'; el.className = 'sync-indicator sincronizando'; return; }
+  el.textContent = '☁️'; el.title = 'Tudo sincronizado com a nuvem'; el.className = 'sync-indicator';
+}
 function syncToCloud(key, value){
   if(!currentUser || !cloudSyncPronto) return;
+  syncPendentes++;
+  atualizarIndicadorSync();
   firestore.collection('usuarios').doc(currentUser.uid).collection('dados').doc(key)
     .set({ payload: value, atualizadoEm: new Date().toISOString() })
-    .catch(err => console.error('Erro ao sincronizar', key, err));
+    .catch(err => {
+      console.error('Erro ao sincronizar', key, err);
+      const el = document.getElementById('syncIndicator');
+      if(el){ el.textContent = '⚠️'; el.title = 'Falha ao sincronizar — verifique sua internet'; el.className = 'sync-indicator erro'; }
+    })
+    .finally(() => { syncPendentes = Math.max(0, syncPendentes - 1); atualizarIndicadorSync(); });
 }
 
 /* ---------- storage helpers ---------- */
@@ -936,6 +963,7 @@ function estoqueEfetivo(produto){
 let config = (() => { try{ return JSON.parse(localStorage.getItem('cv_config')) || {}; }catch(e){ return {}; } })();
 function salvarConfig(){
   config.pixKey = document.getElementById('configPixKey').value.trim();
+  config.metaMensal = parseFloat(document.getElementById('configMetaMensal').value) || 0;
   localStorage.setItem('cv_config', JSON.stringify(config));
 }
 /* ---------- CATÁLOGO EM IMAGEM ---------- */
@@ -1271,6 +1299,7 @@ function openEncomendaModal(){
   renderEncomendaProdutoOptions();
   document.getElementById('encomendaItemQtd').value = 1;
   document.getElementById('encomendaObs').value = '';
+  document.getElementById('encomendaDataEntrega').value = '';
   document.getElementById('encomendaJaPago').checked = false;
   document.getElementById('encomendaFormaPagamento').value = 'Pix';
   toggleEncomendaFormaPagamento();
@@ -1334,6 +1363,7 @@ function editarEncomenda(id){
   renderEncomendaProdutoOptions();
   document.getElementById('encomendaItemQtd').value = 1;
   document.getElementById('encomendaObs').value = e.obs || '';
+  document.getElementById('encomendaDataEntrega').value = e.dataEntrega || '';
   document.getElementById('encomendaJaPago').checked = !!e.pago;
   document.getElementById('encomendaFormaPagamento').value = e.formaPagamento || 'Pix';
   toggleEncomendaFormaPagamento();
@@ -1351,6 +1381,7 @@ function salvarEncomenda(){
   const clienteId = document.getElementById('encomendaCliente').value;
   const jaPago = document.getElementById('encomendaJaPago').checked;
   const obs = document.getElementById('encomendaObs').value.trim();
+  const dataEntrega = document.getElementById('encomendaDataEntrega').value || null;
   const formaPagamento = jaPago ? document.getElementById('encomendaFormaPagamento').value : null;
   const fonte = document.getElementById('encomendaFonte').value;
   const campoEstoque = fonte === 'casa' ? 'estoqueCasa' : 'estoque';
@@ -1381,6 +1412,7 @@ function salvarEncomenda(){
       e.clienteId = clienteId || null;
       e.itens = encomendaItensTemp;
       e.obs = obs;
+      e.dataEntrega = dataEntrega;
       e.pago = jaPago;
       e.formaPagamento = formaPagamento;
       e.fonteEstoque = fonte;
@@ -1410,6 +1442,7 @@ function salvarEncomenda(){
       clienteId: clienteId || null,
       itens: encomendaItensTemp,
       obs,
+      dataEntrega,
       data: todayISO(),
       status: 'Pendente',
       pago: jaPago,
@@ -1546,8 +1579,21 @@ function confirmarEntregaEncomenda(){
   fecharEntregaEncomenda();
   renderEncomendas();
 }
+function badgeDataEntrega(dataEntrega){
+  if(!dataEntrega) return '';
+  const hoje = todayISO();
+  const amanha = new Date(Date.now() + 86400000).toISOString().slice(0,10);
+  if(dataEntrega === hoje) return ' <span class="badge pendente">📅 Hoje</span>';
+  if(dataEntrega === amanha) return ' <span class="badge estoque-baixo">📅 Amanhã</span>';
+  if(dataEntrega < hoje) return ' <span class="badge pendente">📅 Atrasada</span>';
+  return ` <span class="badge estoque-ok">📅 ${fmtDate(dataEntrega)}</span>`;
+}
 function renderEncomendas(){
-  const pendentes = encomendas.filter(e => e.status === 'Pendente').sort((a,b)=>a.data.localeCompare(b.data));
+  const pendentes = encomendas.filter(e => e.status === 'Pendente').sort((a,b)=>{
+    const da = a.dataEntrega || '9999-99-99';
+    const db = b.dataEntrega || '9999-99-99';
+    return da.localeCompare(db) || a.data.localeCompare(b.data);
+  });
   const entregues = encomendas.filter(e => e.status === 'Entregue').sort((a,b)=>b.data.localeCompare(a.data));
 
   renderChecklistSeparar(pendentes);
@@ -1556,7 +1602,7 @@ function renderEncomendas(){
   elP.innerHTML = pendentes.length ? pendentes.map(e => `
     <div class="list-item${e.fonteEstoque === 'casa' ? ' precisa-separar' : ''}" style="display:block;">
       <div class="venda-resumo" onclick="toggleEncomendaDetalheInline('${e.id}')">
-        <div class="name">${e.fonteEstoque === 'casa' ? '🎒 ' : ''}${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}${e.estoqueReservado ? ' <span class="badge estoque-ok">✅ Descontado</span>' : ''}</div>
+        <div class="name">${e.fonteEstoque === 'casa' ? '🎒 ' : ''}${escapeHtml(nomeCliente(e.clienteId))}${e.pago ? ' <span class="badge pago">💰 Pago</span>' : ''}${e.estoqueReservado ? ' <span class="badge estoque-ok">✅ Descontado</span>' : ''}${badgeDataEntrega(e.dataEntrega)}</div>
       </div>
       <div class="encomenda-detalhe-wrap" id="encomendaDetalheInline-${e.id}" style="display:none; margin-top:8px;">
         <div class="meta">${fmtDate(e.data)} · ${e.itens.map(i=>`${fmtQtdItem(i)} ${escapeHtml(i.nome)}`).join(', ')}${e.estoqueReservado ? ` · ${e.fonteEstoque === 'casa' ? '🏠 trazer de casa' : '🏢 já está no trabalho'}` : ''}</div>
@@ -1638,7 +1684,7 @@ function abrirDetalheEncomenda(id){
   const estoqueBadgeTxt = e.estoqueReservado ? ` <span class="badge estoque-ok">✅ Descontado</span>` : ` <span class="badge estoque-zero">⚠️ Não descontado</span>`;
   document.getElementById('detalheEncomendaConteudo').innerHTML = `
     <div style="margin-bottom:12px;">
-      <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}${pagoBadge}${e.status === 'Pendente' ? estoqueBadgeTxt : ''}</div>
+      <div class="name" style="font-size:17px;">${escapeHtml(nomeCliente(e.clienteId))} ${statusBadge}${pagoBadge}${e.status === 'Pendente' ? estoqueBadgeTxt : ''}${e.status === 'Pendente' ? badgeDataEntrega(e.dataEntrega) : ''}</div>
       <div class="meta">${fmtDate(e.data)}${e.estoqueReservado ? ` · descontado ${e.fonteEstoque==='casa' ? '🏠 do estoque de casa' : '🏢 do estoque do trabalho'}` : ' · ⚠️ estoque ainda não descontado'}${e.status==='Entregue' ? (' · entregue ' + (e.entregueDe==='casa' ? '🏠 de casa' : '🏢 do trabalho')) : ''}</div>
     </div>
     <label>Itens</label>
@@ -2752,8 +2798,10 @@ function renderVendas(){
     </div>
   `;
   const el = document.getElementById('listaVendas');
-  const ordenadas = doMes.slice().sort((a,b) => b.data.localeCompare(a.data) || b.id.localeCompare(a.id));
-  if(!ordenadas.length){ el.innerHTML = '<div class="empty">Nenhuma venda neste mês.</div>'; return; }
+  const termoBusca = (document.getElementById('buscaVendas').value || '').trim().toLowerCase();
+  const filtradasBusca = termoBusca ? doMes.filter(v => nomeCliente(v.clienteId).toLowerCase().includes(termoBusca)) : doMes;
+  const ordenadas = filtradasBusca.slice().sort((a,b) => b.data.localeCompare(a.data) || b.id.localeCompare(a.id));
+  if(!ordenadas.length){ el.innerHTML = `<div class="empty">${termoBusca ? 'Nenhuma venda encontrada para esse nome.' : 'Nenhuma venda neste mês.'}</div>`; return; }
   el.innerHTML = ordenadas.map(v => `
     <div class="list-item${v.status==='Pendente' ? ' pendente-destaque' : ''}" style="display:block;">
       <div class="venda-resumo" onclick="toggleVendaDetalhe('${v.id}')">
@@ -2827,6 +2875,7 @@ function renderGraficoVendasPorMes(){
 }
 function renderResumo(){
   document.getElementById('configPixKey').value = config.pixKey || '';
+  document.getElementById('configMetaMensal').value = config.metaMensal || '';
   const mesAtual = todayISO().slice(0,7);
   const doMesTudo = vendas.filter(v => v.data.slice(0,7) === mesAtual);
   const doMes = doMesTudo.filter(v => v.forma !== 'Cortesia');
@@ -2845,6 +2894,22 @@ function renderResumo(){
     <div class="stat"><div class="num">${fmtMoney(lucroMes)}</div><div class="lbl">Lucro estimado este mês (não inclui cortesias)</div></div>
     <div class="stat gold"><div class="num">${fmtMoney(lucroRecebido)}</div><div class="lbl">Lucro já recebido (só pedidos pagos)</div></div>
   `;
+
+  const metaEl = document.getElementById('resumoMetaCard');
+  if(config.metaMensal > 0){
+    const pct = Math.min(100, Math.round((totalMes / config.metaMensal) * 100));
+    metaEl.innerHTML = `
+      <div class="card">
+        <h3>Meta do mês</h3>
+        <div class="meta" style="margin-bottom:8px;">${fmtMoney(totalMes)} de ${fmtMoney(config.metaMensal)} (${pct}%)</div>
+        <div style="background:rgba(237,234,227,.1); border-radius:0; height:14px; overflow:hidden; border:1px solid var(--line-strong,var(--line));">
+          <div style="width:${pct}%; height:100%; background:var(--green); transition:width .3s ease;"></div>
+        </div>
+      </div>
+    `;
+  } else {
+    metaEl.innerHTML = '';
+  }
 
   renderGraficoVendasPorMes();
 
@@ -3027,12 +3092,15 @@ auth.onAuthStateChanged(async (user) => {
     overlay.classList.remove('active');
     document.getElementById('contaEmailLabel').textContent = user.email;
     cloudSyncPronto = false;
+    atualizarIndicadorSync();
     await baixarDadosDaNuvem(user.uid);
     cloudSyncPronto = true;
+    atualizarIndicadorSync();
     verificarBackupAutomatico();
   } else {
     cloudSyncPronto = false;
     overlay.classList.add('active');
+    atualizarIndicadorSync();
   }
 });
 
