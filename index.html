@@ -658,8 +658,8 @@
 
     <label>Forma de pagamento</label>
     <select id="vendaForma" class="forma-select" onchange="atualizarCampoDividido()">
-      <option>Pix</option>
-      <option>Fiado</option>
+      <option>Pago</option>
+      <option>Pendente</option>
       <option>Cortesia</option>
       <option>Dividido</option>
     </select>
@@ -766,7 +766,7 @@
     <div id="encomendaFormaPagamentoBox" style="display:none; margin-top:8px;">
       <label>Forma de pagamento</label>
       <select id="encomendaFormaPagamento">
-        <option>Pix</option>
+        <option>Pago</option>
         <option>Dividido</option>
         <option>Cortesia</option>
       </select>
@@ -790,8 +790,8 @@
     <div id="entregaFormaGroup">
       <label>Forma de pagamento</label>
       <select id="entregaForma">
-        <option>Pix</option>
-        <option>Fiado</option>
+        <option>Pago</option>
+        <option>Pendente</option>
         <option>Cortesia</option>
       </select>
     </div>
@@ -1298,7 +1298,7 @@ function openEncomendaModal(){
   document.getElementById('encomendaObs').value = '';
   document.getElementById('encomendaDataEntrega').value = '';
   document.getElementById('encomendaJaPago').checked = false;
-  document.getElementById('encomendaFormaPagamento').value = 'Pix';
+  document.getElementById('encomendaFormaPagamento').value = 'Pago';
   toggleEncomendaFormaPagamento();
   renderEncomendaItensTemp();
   document.getElementById('encomendaModalBg').classList.add('active');
@@ -1362,7 +1362,7 @@ function editarEncomenda(id){
   document.getElementById('encomendaObs').value = e.obs || '';
   document.getElementById('encomendaDataEntrega').value = e.dataEntrega || '';
   document.getElementById('encomendaJaPago').checked = !!e.pago;
-  document.getElementById('encomendaFormaPagamento').value = e.formaPagamento || 'Pix';
+  document.getElementById('encomendaFormaPagamento').value = e.formaPagamento || 'Pago';
   toggleEncomendaFormaPagamento();
   renderEncomendaItensTemp();
   document.getElementById('encomendaModalBg').classList.add('active');
@@ -1529,13 +1529,13 @@ function abrirEntregaEncomenda(id){
   const fonteTxt = enc.fonteEstoque === 'casa' ? '🏠 Estoque de casa' : '🏢 Estoque do trabalho';
   document.getElementById('entregaFonteInfo').innerHTML = `Estoque já reservado em: <strong style="color:var(--ink);">${fonteTxt}</strong>`;
   if(enc.pago){
-    document.getElementById('entregaForma').value = enc.formaPagamento || 'Pix';
+    document.getElementById('entregaForma').value = enc.formaPagamento || 'Pago';
     document.getElementById('entregaFormaGroup').style.display = 'none';
     const aviso = document.getElementById('entregaJaPagoAviso');
     aviso.style.display = 'block';
-    aviso.textContent = `💰 Este cliente já pagou (${enc.formaPagamento || 'Pix'}) e já está contabilizado nas vendas.`;
+    aviso.textContent = `💰 Este cliente já pagou (${enc.formaPagamento || 'Pago'}) e já está contabilizado nas vendas.`;
   } else {
-    document.getElementById('entregaForma').value = 'Pix';
+    document.getElementById('entregaForma').value = 'Pago';
     document.getElementById('entregaFormaGroup').style.display = 'block';
     document.getElementById('entregaJaPagoAviso').style.display = 'none';
   }
@@ -1559,7 +1559,7 @@ function confirmarEntregaEncomenda(){
       clienteId: enc.clienteId,
       itens: itensVenda,
       forma,
-      status: forma === 'Fiado' ? 'Pendente' : 'Pago',
+      status: forma === 'Pendente' ? 'Pendente' : 'Pago',
       total
     };
     vendas.push(venda);
@@ -1677,7 +1677,7 @@ function abrirDetalheEncomenda(id){
   if(!e) return;
   const itensHtml = e.itens.map(i => `<div class="chip"><span>${fmtQtdItem(i)} ${escapeHtml(i.nome)}</span></div>`).join('');
   const statusBadge = e.status === 'Entregue' ? `<span class="badge pago">Entregue</span>` : `<span class="badge pendente">Pendente</span>`;
-  const pagoBadge = e.pago ? ` <span class="badge pago">💰 Pago (${escapeHtml(e.formaPagamento || 'Pix')})</span>` : '';
+  const pagoBadge = e.pago ? ` <span class="badge pago">💰 Pago (${escapeHtml(e.formaPagamento || 'Pago')})</span>` : '';
   const estoqueBadgeTxt = e.estoqueReservado ? ` <span class="badge estoque-ok">✅ Descontado</span>` : ` <span class="badge estoque-zero">⚠️ Não descontado</span>`;
   document.getElementById('detalheEncomendaConteudo').innerHTML = `
     <div style="margin-bottom:12px;">
@@ -2367,7 +2367,7 @@ function openVendaModal(){
   document.getElementById('vendaNovoClienteForm').style.display = 'none';
   renderVendaProdutoOptions();
   document.getElementById('vendaItemQtd').value = 1;
-  document.getElementById('vendaForma').value = 'Pix';
+  document.getElementById('vendaForma').value = 'Pago';
   document.getElementById('vendaValorPago').value = '';
   document.getElementById('vendaData').value = todayISO();
   renderVendaItens();
@@ -2439,8 +2439,8 @@ function processarComandoVoz(transcriptOriginal){
   if(!produtos.length){ alert('Cadastre ao menos um produto antes de registrar uma venda.'); switchView('produtos'); return; }
   let texto = normalizarTexto(transcriptOriginal);
 
-  let forma = 'Pix';
-  if(/\bfiado\b/.test(texto)){ forma = 'Fiado'; texto = texto.replace(/\bfiado\b/g,''); }
+  let forma = 'Pago';
+  if(/\bfiado\b/.test(texto)){ forma = 'Pendente'; texto = texto.replace(/\bfiado\b/g,''); }
   else if(/\bcortesia\b/.test(texto)){ forma = 'Cortesia'; texto = texto.replace(/\bcortesia\b/g,''); }
   else if(/\bpix\b/.test(texto)){ texto = texto.replace(/\bpix\b/g,''); }
 
@@ -2628,10 +2628,10 @@ function salvarVenda(){
     if(valorPago >= total){ alert('O valor pago é maior ou igual ao total — escolha "Pix" em vez de "Dividido".'); return; }
     valorFiado = Math.round((total - valorPago) * 100) / 100;
     status = (vendaEditOriginal && vendaEditOriginal.forma === 'Dividido') ? vendaEditOriginal.status : 'Pendente';
-  } else if(forma !== 'Fiado'){
+  } else if(forma !== 'Pendente'){
     status = 'Pago';
   } else {
-    status = (vendaEditOriginal && vendaEditOriginal.forma === 'Fiado') ? vendaEditOriginal.status : 'Pendente';
+    status = (vendaEditOriginal && vendaEditOriginal.forma === 'Pendente') ? vendaEditOriginal.status : 'Pendente';
   }
 
   if(vendaEditId){
@@ -2690,6 +2690,16 @@ function marcarComoPago(id){
   v.status = 'Pago';
   DB.set('cv_vendas', vendas);
   renderVendas();
+  enviarAgradecimentoPagamento(v);
+}
+function enviarAgradecimentoPagamento(venda){
+  const tel = telefoneCliente(venda.clienteId);
+  if(!tel) return;
+  let digitos = tel.replace(/\D/g, '');
+  if(digitos.length <= 11){ digitos = '55' + digitos; }
+  const nome = nomeCliente(venda.clienteId);
+  const msg = `Olá ${nome}! Recebemos o seu pagamento de ${fmtMoney(venda.total)}. Muito obrigado pela confiança! 😊`;
+  window.open(whatsappUrl(digitos, msg), '_blank');
 }
 function excluirVenda(id){
   const v = vendas.find(v => v.id === id);
